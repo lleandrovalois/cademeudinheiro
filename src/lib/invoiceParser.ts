@@ -127,7 +127,7 @@ export function suggestCategory(description: string, categories: Category[]): st
       keywords: [
         'shopee', 'magalu', 'magazine luiza', 'mercado livre', 'mercadolivre', 'amazon', 'shein', 
         'aliexpress', 'zara', 'renner', 'c&a', 'riachuelo', 'centauro', 'nike', 'adidas', 'kabum', 
-        'terabyte', 'pichau', 'fast shop', 'leroy', 'mobly', 'madeira', 'kalunga', 'tactica', 'braskar'
+        'terabyte', 'pichau', 'fast shop', 'leroy', 'mobly', 'madeira', 'kalunga', 'tactica', 'braskar', 'fabricio'
       ],
       categoryKeyword: 'compra'
     }
@@ -165,7 +165,8 @@ function checkIfPaymentOrCredit(description: string): boolean {
 }
 
 /**
- * Parse credit card statement text into structured transactions
+ * Parse credit card statement text into structured transactions.
+ * Handles both standalone date lines (e.g. Nubank) and inline date transactions.
  */
 export function parseInvoiceText(rawText: string, categories: Category[]): ParsedInvoiceResult {
   const cardName = detectCardName(rawText);
@@ -174,98 +175,122 @@ export function parseInvoiceText(rawText: string, categories: Category[]): Parse
 
   const items: ParsedInvoiceItem[] = [];
   let ignoredCount = 0;
+  let pendingDate: string | null = null;
 
-  lines.forEach((line, index) => {
-    // Match line ending with Brazilian currency amount:
-    // Supports R$ 88,00 | 88,00 | −R$ 2.274,97 | -R$ 2.274,97 | 2.274,97-
-    // Notice [−\-] covers ASCII minus (-) and Unicode minus (− / \u2212)
-    const amountMatch = line.match(/(?:[−\-–—]\s*)?(?:R\$\s*)?([−\-–—]?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[−\-–—]?\s*\d+,\d{2})(?:\s*([−\-–—]))?$/i);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
 
-    if (!amountMatch) {
-      return;
+    // Check if line is ONLY a date (e.g., '16 AGO' or '03 SET' or '16/08')
+    const standaloneDateMatch = 
+      line.match(/^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)$/i) || 
+      line.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+
+    if (standaloneDateMatch) {
+      if (standaloneDateMatch[2].length === 3) {
+        const monthWord = standaloneDateMatch[2].toLowerCase();
+        pendingDate = `${detectedYear}-${MONTH_NAMES_BR[monthWord] || '01'}-${standaloneDateMatch[1].padStart(2, '0')}`;
+      } else {
+        const yr = standaloneDateMatch[3] 
+          ? (standaloneDateMatch[3].length === 2 ? 2000 + parseInt(standaloneDateMatch[3], 10) : parseInt(standaloneDateMatch[3], 10))
+          : detectedYear;
+        pendingDate = `${yr}-${standaloneDateMatch[2].padStart(2, '0')}-${standaloneDateMatch[1].padStart(2, '0')}`;
+      }
+      continue;
     }
 
-    const rawAmountStr = amountMatch[1]
+    // Match amount at end of line (supports with or without space before R$, e.g. 'Parcela 2/2R$ 88,00' or 'R$ 88,00')
+    const amountMatch = line.match(/(?:([−\-–—])\s*)?(?:R\$\s*)?([−\-–—]?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[−\-–—]?\s*\d+,\d{2})(?:\s*([−\-–—]))?$/i);
+    if (!amountMatch) {
+      pendingDate = null;
+      continue;
+    }
+
+    const rawVal = amountMatch[2]
       .replace(/\s/g, '')
       .replace(/[−\-–—]/g, '')
       .replace(/\./g, '')
       .replace(',', '.');
 
-    let amount = parseFloat(rawAmountStr);
-    if (isNaN(amount) || amount === 0) return;
-
-    // Detect negative value (payments, refunds, discounts)
-    const isNegative = line.includes('−') || amountMatch[0].includes('-') || amountMatch[0].includes('−') || amountMatch[2] != null;
-
-    const lineWithoutAmount = line.slice(0, line.lastIndexOf(amountMatch[0])).trim();
-    if (!lineWithoutAmount) return;
-
-    let day = '';
-    let month = '';
-    let year = detectedYear;
-    let description = '';
-
-    // Match Pattern 1: Date with text month (e.g., "16 AGO ...", "03 SET ...")
-    const matchTextMonth = lineWithoutAmount.match(/^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\s+(.+)$/i);
-    
-    // Match Pattern 2: Date with slash (e.g., "16/08 ...", "16/08/2026 ...")
-    const matchSlash = lineWithoutAmount.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/);
-
-    if (matchTextMonth) {
-      day = matchTextMonth[1].padStart(2, '0');
-      const monthWord = matchTextMonth[2].toLowerCase();
-      month = MONTH_NAMES_BR[monthWord] || '01';
-      description = matchTextMonth[3].trim();
-    } else if (matchSlash) {
-      day = matchSlash[1].padStart(2, '0');
-      month = matchSlash[2].padStart(2, '0');
-      if (matchSlash[3]) {
-        const yr = matchSlash[3];
-        year = yr.length === 2 ? 2000 + parseInt(yr, 10) : parseInt(yr, 10);
-      }
-      description = matchSlash[4].trim();
-    } else {
-      ignoredCount++;
-      return;
+    const amount = parseFloat(rawVal);
+    if (isNaN(amount) || amount === 0) {
+      pendingDate = null;
+      continue;
     }
 
-    // Strip card bullet dots and 4 digits (e.g., "•••• 5013 Description" or "**** 1835 Description")
+    const isNegative = line.includes('−') || line.includes('-R$') || (amountMatch[1] != null) || (amountMatch[3] != null);
+    let lineWithoutAmount = line.slice(0, line.lastIndexOf(amountMatch[0])).trim();
+    if (lineWithoutAmount.endsWith('R$')) {
+      lineWithoutAmount = lineWithoutAmount.slice(0, -2).trim();
+    }
+
+    let date = pendingDate;
+    pendingDate = null; // consume
+
+    // If date was not on previous line, check if it's on this line (inline date)
+    if (!date) {
+      const inlineDateMatchText = lineWithoutAmount.match(/^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\s+(.+)$/i);
+      const inlineDateMatchSlash = lineWithoutAmount.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/);
+
+      if (inlineDateMatchText) {
+        const monthWord = inlineDateMatchText[2].toLowerCase();
+        date = `${detectedYear}-${MONTH_NAMES_BR[monthWord] || '01'}-${inlineDateMatchText[1].padStart(2, '0')}`;
+        lineWithoutAmount = inlineDateMatchText[3].trim();
+      } else if (inlineDateMatchSlash) {
+        const yr = inlineDateMatchSlash[3]
+          ? (inlineDateMatchSlash[3].length === 2 ? 2000 + parseInt(inlineDateMatchSlash[3], 10) : parseInt(inlineDateMatchSlash[3], 10))
+          : detectedYear;
+        date = `${yr}-${inlineDateMatchSlash[2].padStart(2, '0')}-${inlineDateMatchSlash[1].padStart(2, '0')}`;
+        lineWithoutAmount = inlineDateMatchSlash[4].trim();
+      }
+    }
+
+    if (!date || !lineWithoutAmount) {
+      ignoredCount++;
+      continue;
+    }
+
+    // Check card digits (e.g. •••• 5013 or **** 1835)
     let cardDigits: string | undefined;
-    const cardMatch = description.match(/^[•\.\*\s]+\s*(\d{4})\s*(.+)$/);
+    const cardMatch = lineWithoutAmount.match(/^[•\.\*\s]+\s*(\d{4})\s*(.+)$/);
+    let desc = lineWithoutAmount;
     if (cardMatch) {
       cardDigits = cardMatch[1];
-      description = cardMatch[2].trim();
+      desc = cardMatch[2].trim();
     }
 
-    // Detect and parse installment info (e.g., "Fabriciobenjamin - Parcela 2/2" or "Tactical - Parcela 7/10" or "Magalu 2/10")
+    // Installment detection (e.g. 'Fabriciobenjamin - Parcela 2/2' or 'Royal Enfield - Parcela 2/6' or 'Magalu 02/10')
     let installmentInfo: { current: number; total: number } | undefined;
-    const instMatch = description.match(/[-–—]?\s*(?:parcela\s*)?\(?(\d{1,2})\/(\d{1,2})\)?$/i);
+    const instMatch = desc.match(/[-–—]?\s*(?:parcela\s*)?\(?(\d{1,2})\/(\d{1,2})\)?$/i);
     if (instMatch) {
       const cur = parseInt(instMatch[1], 10);
       const tot = parseInt(instMatch[2], 10);
       if (tot > 1 && cur <= tot) {
         installmentInfo = { current: cur, total: tot };
-        // Clean the installment suffix from description for neat display
-        description = description.slice(0, description.lastIndexOf(instMatch[0])).trim();
+        desc = desc.slice(0, desc.lastIndexOf(instMatch[0])).trim();
       }
     }
 
     // Skip general non-transaction headers
-    const lowerDesc = description.toLowerCase();
-    if (lowerDesc.includes('saldo anterior') || lowerDesc.includes('total da fatura') || lowerDesc.includes('limite total') || lowerDesc.includes('vencimento em')) {
+    const lowerDesc = desc.toLowerCase();
+    if (
+      lowerDesc.includes('saldo restante da fatura') || 
+      lowerDesc.includes('saldo anterior') || 
+      lowerDesc.includes('total da fatura') || 
+      lowerDesc.includes('limite total') || 
+      lowerDesc.includes('vencimento em')
+    ) {
       ignoredCount++;
-      return;
+      continue;
     }
 
-    const isCredit = isNegative || checkIfPaymentOrCredit(description);
+    const isCredit = isNegative || checkIfPaymentOrCredit(desc);
     const positiveAmount = Math.abs(amount);
-    const itemDate = `${year}-${month}-${day}`;
-    const category = suggestCategory(description, categories);
+    const category = suggestCategory(desc, categories);
 
     items.push({
-      id: `invoice-item-${index}-${Date.now()}`,
-      date: itemDate,
-      description,
+      id: `invoice-item-${i}-${Date.now()}`,
+      date,
+      description: desc,
       amount: positiveAmount,
       category,
       type: isCredit ? 'income' : 'expense',
@@ -273,9 +298,9 @@ export function parseInvoiceText(rawText: string, categories: Category[]): Parse
       cardDigits,
       installmentInfo,
       rawText: line,
-      selected: !isCredit // Payments unselected by default so they don't double count expenses
+      selected: !isCredit // Payments are unselected by default
     });
-  });
+  }
 
   // Calculate detected dominant month
   let detectedMonth: string | undefined;

@@ -2,36 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// Ensure browser globals required by pdfjs-dist / pdf-parse exist in Node.js runtime
-if (typeof (globalThis as unknown as { DOMMatrix?: unknown }).DOMMatrix === 'undefined') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    (globalThis as unknown as { DOMMatrix: unknown }).DOMMatrix = require('dommatrix');
-  } catch {
-    (globalThis as unknown as { DOMMatrix: unknown }).DOMMatrix = class DOMMatrix {
-      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-      m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
-      constructor(init?: number[]) {
-        if (Array.isArray(init)) {
-          this.a = init[0] ?? 1; this.b = init[1] ?? 0;
-          this.c = init[2] ?? 0; this.d = init[3] ?? 1;
-          this.e = init[4] ?? 0; this.f = init[5] ?? 0;
-        }
-      }
-      multiply() { return this; }
-      translate() { return this; }
-      scale() { return this; }
-      rotate() { return this; }
-      inverse() { return this; }
-      transformPoint(p: unknown) { return p; }
-    };
-  }
-}
-
-if (typeof (globalThis as unknown as { Path2D?: unknown }).Path2D === 'undefined') {
-  (globalThis as unknown as { Path2D: unknown }).Path2D = class Path2D {};
-}
-
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -44,30 +14,12 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Support both pdf-parse v1 (function) and v2 (class PDFParse)
+    // Using stable pdf-parse 1.1.4 (zero DOM/browser dependencies, 100% server compatible)
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const pdfLib = require('pdf-parse');
-    let extractedText = '';
-    let pageCount = 1;
+    const pdf = require('pdf-parse');
+    const data = await pdf(buffer);
 
-    if (typeof pdfLib === 'function') {
-      const data = await pdfLib(buffer);
-      extractedText = data.text || '';
-      pageCount = data.numpages || 1;
-    } else if (pdfLib.PDFParse) {
-      const parser = new pdfLib.PDFParse(new Uint8Array(buffer));
-      const res = await parser.getText();
-      extractedText = res.text || '';
-      pageCount = res.total || 1;
-    } else if (typeof pdfLib.default === 'function') {
-      const data = await pdfLib.default(buffer);
-      extractedText = data.text || '';
-      pageCount = data.numpages || 1;
-    } else {
-      throw new Error('Mecanismo de leitura de PDF não suportado.');
-    }
-
-    if (!extractedText.trim()) {
+    if (!data.text || !data.text.trim()) {
       return NextResponse.json(
         { error: 'Não foi possível extrair o texto deste PDF. O arquivo pode ser uma imagem escaneada sem camada de texto pesquisável.' },
         { status: 400 }
@@ -75,8 +27,8 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      text: extractedText,
-      pages: pageCount
+      text: data.text,
+      pages: data.numpages || 1
     });
   } catch (err: unknown) {
     console.error('Erro ao processar PDF da fatura:', err);
