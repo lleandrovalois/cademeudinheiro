@@ -69,6 +69,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   // Form State - Installment Purchase
   const [totalInstallments, setTotalInstallments] = useState('10');
   const [paymentCard, setPaymentCard] = useState('Nubank Ultravioleta');
+  const [paidInstallments, setPaidInstallments] = useState('0');
 
   // Form State - Recurring Bill
   const [dueDay, setDueDay] = useState('10');
@@ -97,12 +98,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     } else if (modalTab === 'installment') {
       const installmentsCount = parseInt(totalInstallments, 10) || 2;
       const installmentAmount = +(numAmount / installmentsCount).toFixed(2);
+      const paidCount = Math.max(0, parseInt(paidInstallments, 10) || 0);
       onSaveInstallment({
         description: description.trim(),
         totalAmount: numAmount,
         installmentAmount,
         totalInstallments: installmentsCount,
-        paidInstallments: 1, // First installment assumed current
+        paidInstallments: paidCount,
         startDate: date,
         category,
         paymentCard: paymentCard.trim(),
@@ -124,6 +126,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setDescription('');
     setAmount('');
     setNotes('');
+    setPaidInstallments('0');
     onClose();
   };
 
@@ -367,31 +370,51 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
           {/* Specific Installment Fields */}
           {modalTab === 'installment' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div className="form-group">
-                <label className="form-label">Número de Parcelas</label>
-                <select
-                  value={totalInstallments}
-                  onChange={e => setTotalInstallments(e.target.value)}
-                  className="form-select"
-                >
-                  {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24, 36, 48].map(n => (
-                    <option key={n} value={n}>{n}x parcelas</option>
-                  ))}
-                </select>
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label">Número de Parcelas</label>
+                  <select
+                    value={totalInstallments}
+                    onChange={e => setTotalInstallments(e.target.value)}
+                    className="form-select"
+                  >
+                    {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24, 36, 48].map(n => (
+                      <option key={n} value={n}>{n}x parcelas</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Cartão Utilizado</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: Nubank, Itaú..."
+                    value={paymentCard}
+                    onChange={e => setPaymentCard(e.target.value)}
+                    className="form-input"
+                  />
+                </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label">Cartão Utilizado</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Parcelas Já Pagas</label>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    (Geralmente 0 para compra nova)
+                  </span>
+                </div>
                 <input
-                  type="text"
-                  placeholder="Ex: Nubank, Itaú..."
-                  value={paymentCard}
-                  onChange={e => setPaymentCard(e.target.value)}
+                  type="number"
+                  min="0"
+                  max={Math.max(0, (parseInt(totalInstallments, 10) || 10) - 1)}
+                  value={paidInstallments}
+                  onChange={e => setPaidInstallments(e.target.value)}
                   className="form-input"
+                  placeholder="0"
                 />
               </div>
-            </div>
+            </>
           )}
 
           {/* Payment Method & Status for single transactions */}

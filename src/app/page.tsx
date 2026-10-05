@@ -293,22 +293,26 @@ export default function Home() {
     };
     const updated = [newInst, ...appData.installments];
     
-    // Automatically add first transaction for this month's installment
-    const firstTx: Transaction = {
-      id: `tx-inst-${newInst.id}-1`,
-      description: `${newInst.description} (1/${newInst.totalInstallments})`,
-      amount: newInst.installmentAmount,
-      type: 'expense',
-      category: newInst.category,
-      date: newInst.startDate,
-      paymentMethod: 'credit_card',
-      status: 'paid',
-      notes: `Cartão: ${newInst.paymentCard || 'Crédito'}`,
-      installmentId: newInst.id,
-      createdAt: new Date().toISOString()
-    };
+    // Only register a paid transaction if the user explicitly set paidInstallments > 0
+    let updatedTxs = [...appData.transactions];
+    let createdTx: Transaction | null = null;
 
-    const updatedTxs = [firstTx, ...appData.transactions];
+    if (newInst.paidInstallments > 0) {
+      createdTx = {
+        id: `tx-inst-${newInst.id}-1`,
+        description: `${newInst.description} (${newInst.paidInstallments}/${newInst.totalInstallments})`,
+        amount: newInst.installmentAmount,
+        type: 'expense',
+        category: newInst.category,
+        date: newInst.startDate,
+        paymentMethod: 'credit_card',
+        status: 'paid',
+        notes: `Cartão: ${newInst.paymentCard || 'Crédito'}`,
+        installmentId: newInst.id,
+        createdAt: new Date().toISOString()
+      };
+      updatedTxs = [createdTx, ...appData.transactions];
+    }
 
     setAppData({ ...appData, installments: updated, transactions: updatedTxs });
     
@@ -317,41 +321,67 @@ export default function Home() {
 
     if (currentUser && !currentUser.isGuest) {
       syncInstallmentToCloud(newInst, currentUser.id);
-      syncTransactionToCloud(firstTx, currentUser.id);
+      if (createdTx) {
+        syncTransactionToCloud(createdTx, currentUser.id);
+      }
     }
   };
 
   const handleAdvanceInstallment = (id: string) => {
     if (!appData) return;
-    let targetInst: InstallmentPurchase | null = null;
-    const updated = appData.installments.map(i => {
-      if (i.id === id && i.paidInstallments < i.totalInstallments) {
-        const adv = { ...i, paidInstallments: i.paidInstallments + 1 };
-        targetInst = adv;
-        return adv;
-      }
-      return i;
-    });
-    setAppData({ ...appData, installments: updated });
+    const existing = appData.installments.find(i => i.id === id);
+    if (!existing || existing.paidInstallments >= existing.totalInstallments) return;
+
+    const nextPaidNum = existing.paidInstallments + 1;
+    const updatedInst: InstallmentPurchase = { ...existing, paidInstallments: nextPaidNum };
+    const updated = appData.installments.map(i => i.id === id ? updatedInst : i);
+
+    // Automatically record an expense transaction when paying/advancing an installment
+    const advanceTx: Transaction = {
+      id: `tx-inst-${id}-${nextPaidNum}-${Date.now()}`,
+      description: `${updatedInst.description} (${nextPaidNum}/${updatedInst.totalInstallments})`,
+      amount: updatedInst.installmentAmount,
+      type: 'expense',
+      category: updatedInst.category,
+      date: new Date().toISOString().slice(0, 10),
+      paymentMethod: 'credit_card',
+      status: 'paid',
+      notes: `Parcela quitada: ${updatedInst.paymentCard || 'Crédito'}`,
+      installmentId: updatedInst.id,
+      createdAt: new Date().toISOString()
+    };
+
+    const updatedTxs = [advanceTx, ...appData.transactions];
+
+    setAppData({ ...appData, installments: updated, transactions: updatedTxs });
     
     const userId = currentUser?.id || 'guest';
-    saveUserData(userId, { installments: updated });
+    saveUserData(userId, { installments: updated, transactions: updatedTxs });
 
-    if (targetInst && currentUser && !currentUser.isGuest) {
-      syncInstallmentToCloud(targetInst, currentUser.id);
+    if (currentUser && !currentUser.isGuest) {
+      syncInstallmentToCloud(updatedInst, currentUser.id);
+      syncTransactionToCloud(advanceTx, currentUser.id);
     }
   };
 
   const handleDeleteInstallment = (id: string) => {
     if (!appData) return;
     const updated = appData.installments.filter(i => i.id !== id);
-    setAppData({ ...appData, installments: updated });
+
+    // Also remove any transactions linked to this installment so they don't linger in balance
+    const txsToDelete = appData.transactions.filter(t => t.installmentId === id);
+    const updatedTxs = appData.transactions.filter(t => t.installmentId !== id);
+
+    setAppData({ ...appData, installments: updated, transactions: updatedTxs });
     
     const userId = currentUser?.id || 'guest';
-    saveUserData(userId, { installments: updated });
+    saveUserData(userId, { installments: updated, transactions: updatedTxs });
 
     if (currentUser && !currentUser.isGuest) {
       deleteInstallmentFromCloud(id, currentUser.id);
+      txsToDelete.forEach(t => {
+        deleteTransactionFromCloud(t.id, currentUser.id);
+      });
     }
   };
 
