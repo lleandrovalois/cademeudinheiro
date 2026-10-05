@@ -7,12 +7,23 @@ export interface DueBillItem {
   type: 'recurring' | 'transaction' | 'installment';
 }
 
+function cleanEnv(val?: string): string {
+  if (!val) return '';
+  let str = val.trim();
+  if ((str.startsWith("'") && str.endsWith("'")) || (str.startsWith('"') && str.endsWith('"'))) {
+    str = str.slice(1, -1);
+  }
+  return str.trim();
+}
+
 export function getEmailTransporter() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT) || 465;
-  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+  const host = cleanEnv(process.env.SMTP_HOST) || 'smtp.hostinger.com';
+  const portStr = cleanEnv(process.env.SMTP_PORT);
+  const port = Number(portStr) || 465;
+  const secureEnv = cleanEnv(process.env.SMTP_SECURE);
+  const secure = secureEnv ? secureEnv === 'true' : port === 465;
+  const user = cleanEnv(process.env.SMTP_USER);
+  const pass = cleanEnv(process.env.SMTP_PASS);
 
   if (!host || !user || !pass) {
     return null;
@@ -26,6 +37,9 @@ export function getEmailTransporter() {
       user,
       pass,
     },
+    tls: {
+      rejectUnauthorized: false
+    }
   });
 }
 
@@ -43,8 +57,10 @@ export async function sendDueBillsReminderEmail(params: {
     };
   }
 
-  const from = process.env.SMTP_FROM || `"Cadê Meu Dinheiro?" <${process.env.SMTP_USER}>`;
-  const appUrl = process.env.APP_URL || 'https://financeiro.klynner.com.br';
+  const rawFrom = cleanEnv(process.env.SMTP_FROM);
+  const user = cleanEnv(process.env.SMTP_USER);
+  const from = rawFrom || `"Cadê Meu Dinheiro?" <${user}>`;
+  const appUrl = cleanEnv(process.env.APP_URL) || 'https://financeiro.klynner.com.br';
 
   const totalAmount = params.bills.reduce((sum, b) => sum + b.amount, 0);
   const formattedTotal = totalAmount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
