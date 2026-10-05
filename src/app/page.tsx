@@ -21,6 +21,7 @@ import { BudgetsManager } from '../components/BudgetsManager';
 import { TransactionModal } from '../components/TransactionModal';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { AuthModal } from '../components/AuthModal';
+import { AuthScreen } from '../components/AuthScreen';
 
 import { 
   AppDataState, 
@@ -50,6 +51,7 @@ import { formatCurrency } from '../lib/formatters';
 export default function Home() {
   const [appData, setAppData] = useState<AppDataState | null>(null);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
   // Selected month (default current YYYY-MM)
@@ -70,22 +72,27 @@ export default function Home() {
   // Initialize storage, auth and theme
   useEffect(() => {
     const initApp = async () => {
-      const user = await getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-        const data = initializeStorage(user.id);
-        setAppData(data);
+      try {
+        const user = await getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          const data = initializeStorage(user.id);
+          setAppData(data);
 
-        // Fetch user data from Supabase in background
-        if (!user.isGuest) {
-          const cloudData = await syncUserDataFromCloud(user.id);
-          if (cloudData) setAppData(cloudData);
+          // Fetch user data from Supabase in background
+          if (!user.isGuest) {
+            const cloudData = await syncUserDataFromCloud(user.id);
+            if (cloudData) setAppData(cloudData);
+          }
+        } else {
+          // Usuário não autenticado: NÃO carrega dados sensíveis!
+          setCurrentUser(null);
+          setAppData(null);
         }
-      } else {
-        // Fallback to guest initially and offer login
-        const data = initializeStorage('guest');
-        setAppData(data);
-        setIsAuthModalOpen(true);
+      } catch (err) {
+        console.error('Erro ao verificar usuário inicial:', err);
+      } finally {
+        setIsCheckingAuth(false);
       }
 
       const savedHide = localStorage.getItem('fincontrol_hide_values');
@@ -115,13 +122,13 @@ export default function Home() {
           setCurrentUser(authUser);
           const data = initializeStorage(authUser.id);
           setAppData(data);
+          setIsCheckingAuth(false);
           const cloudData = await syncUserDataFromCloud(authUser.id);
           if (cloudData) setAppData(cloudData);
         } else if (event === 'SIGNED_OUT') {
           setCurrentUser(null);
-          const data = initializeStorage('guest');
-          setAppData(data);
-          setIsAuthModalOpen(true);
+          setAppData(null);
+          setIsCheckingAuth(false);
         }
       });
 
@@ -161,9 +168,7 @@ export default function Home() {
   const handleSignOut = async () => {
     await signOutUser();
     setCurrentUser(null);
-    const data = initializeStorage('guest');
-    setAppData(data);
-    setIsAuthModalOpen(true);
+    setAppData(null);
   };
 
   // Transaction Actions
@@ -417,7 +422,7 @@ export default function Home() {
     setAppData(reset);
   };
 
-  if (!appData) {
+  if (isCheckingAuth) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -429,13 +434,19 @@ export default function Home() {
         fontWeight: 700,
         gap: '12px'
       }}>
-        <div style={{ width: '20px', height: '20px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <div style={{ width: '24px', height: '24px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
         <span>Carregando Cadê Meu Dinheiro?...</span>
         <style jsx>{`
           @keyframes spin { to { transform: rotate(360deg); } }
         `}</style>
       </div>
     );
+  }
+
+  // Se o usuário não estiver logado, exibe EXCLUSIVAMENTE a tela de autenticação
+  // ZERO dados sensíveis ou lançamentos são renderizados antes de autenticar!
+  if (!currentUser || !appData) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
   }
 
   const summary = calculateMonthlySummary(appData.transactions, currentMonth);
@@ -486,6 +497,27 @@ export default function Home() {
           {/* TAB 1: DASHBOARD */}
           {activeTab === 'dashboard' && (
             <>
+              {/* Onboarding Welcome Card for Fresh Accounts */}
+              {appData.transactions.length === 0 && (
+                <div className="glass-panel" style={{
+                  padding: '24px',
+                  marginBottom: '20px',
+                  background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.12) 0%, rgba(16, 185, 129, 0.08) 100%)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)'
+                }}>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '6px' }}>
+                    Olá, {currentUser?.name || currentUser?.email?.split('@')[0]}! Bem-vindo ao Cadê Meu Dinheiro.
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                    Sua conta está limpa, privada e pronta para você começar. Seus lançamentos são 100% isolados e ninguém mais tem acesso aos seus dados.
+                  </p>
+                  <button onClick={() => openNewTransactionModal('expense')} className="btn btn-primary">
+                    <Plus size={16} />
+                    <span>Lançar Primeiro Ganho ou Despesa</span>
+                  </button>
+                </div>
+              )}
+
               {/* Hero Metric Cards */}
               <BalanceCards
                 summary={summary}
