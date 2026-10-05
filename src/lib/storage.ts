@@ -202,6 +202,17 @@ export async function deleteTransactionFromCloud(txId: string, userId: string) {
   }
 }
 
+export async function clearAllTransactionsInCloud(userId: string) {
+  if (userId === 'guest') return;
+  try {
+    await fetch('/api/data/transactions?id=all', {
+      method: 'DELETE'
+    });
+  } catch (err) {
+    console.error('Falha ao limpar transações no servidor:', err);
+  }
+}
+
 export async function syncRecurringBillToCloud(bill: RecurringBill, userId: string) {
   if (userId === 'guest') return;
   try {

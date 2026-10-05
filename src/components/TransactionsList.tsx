@@ -10,10 +10,13 @@ import {
   ArrowDownRight, 
   Tag, 
   SlidersHorizontal,
-  Plus
+  Plus,
+  Calendar,
+  CalendarClock,
+  AlertCircle
 } from 'lucide-react';
 import { Transaction, Category } from '../types/finance';
-import { formatCurrency, formatDateBR, getPaymentMethodLabel } from '../lib/formatters';
+import { formatCurrency, formatDateBR, getPaymentMethodLabel, formatMonthYearBR } from '../lib/formatters';
 
 interface TransactionsListProps {
   transactions: Transaction[];
@@ -23,6 +26,7 @@ interface TransactionsListProps {
   onDeleteTransaction: (id: string) => void;
   onToggleStatus: (id: string) => void;
   onOpenNewTransaction: () => void;
+  onClearAllTransactions?: () => void;
 }
 
 export const TransactionsList: React.FC<TransactionsListProps> = ({
@@ -32,16 +36,21 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
   hideValues,
   onDeleteTransaction,
   onToggleStatus,
-  onOpenNewTransaction
+  onOpenNewTransaction,
+  onClearAllTransactions
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [periodScope, setPeriodScope] = useState<'month' | 'all'>('month');
 
   // Filter transactions
   const monthTransactions = transactions.filter(t => t.date.startsWith(currentMonth));
+  const outOfMonthTransactions = transactions.filter(t => !t.date.startsWith(currentMonth));
 
-  const filteredTransactions = monthTransactions.filter(t => {
+  const baseTransactions = periodScope === 'month' ? monthTransactions : transactions;
+
+  const filteredTransactions = baseTransactions.filter(t => {
     // Type filter
     if (typeFilter === 'income' && t.type !== 'income') return false;
     if (typeFilter === 'expense' && t.type !== 'expense') return false;
@@ -76,27 +85,119 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
         justifyContent: 'space-between',
         flexWrap: 'wrap',
         gap: '12px',
-        marginBottom: '20px'
+        marginBottom: '16px'
       }}>
         <div>
           <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Lançamentos & Extrato</h2>
           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-            {filteredTransactions.length} registro(s) encontrado(s) • Total filtrado: {' '}
+            {filteredTransactions.length} registro(s) exibido(s) • Total filtrado: {' '}
             <strong style={{ color: filteredTotal >= 0 ? 'var(--color-income)' : 'var(--color-expense)' }}>
               {formatCurrency(filteredTotal, hideValues)}
             </strong>
           </span>
         </div>
 
-        <button 
-          onClick={onOpenNewTransaction}
-          className="btn btn-primary"
-          style={{ padding: '8px 14px', fontSize: '0.85rem' }}
-        >
-          <Plus size={16} />
-          <span>Novo Lançamento</span>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          {/* Period Selector Tabs */}
+          <div style={{
+            display: 'inline-flex',
+            background: 'var(--bg-tertiary)',
+            padding: '3px',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--border-subtle)'
+          }}>
+            <button
+              onClick={() => setPeriodScope('month')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: periodScope === 'month' ? 'var(--brand-primary)' : 'transparent',
+                color: periodScope === 'month' ? '#fff' : 'var(--text-secondary)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <Calendar size={13} />
+              <span>Mês Atual ({monthTransactions.length})</span>
+            </button>
+            <button
+              onClick={() => setPeriodScope('all')}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                background: periodScope === 'all' ? 'var(--brand-primary)' : 'transparent',
+                color: periodScope === 'all' ? '#fff' : 'var(--text-secondary)',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              <CalendarClock size={13} />
+              <span>Todo o Histórico ({transactions.length})</span>
+            </button>
+          </div>
+
+          <button 
+            onClick={onOpenNewTransaction}
+            className="btn btn-primary"
+            style={{ padding: '8px 14px', fontSize: '0.85rem' }}
+          >
+            <Plus size={16} />
+            <span>Novo Lançamento</span>
+          </button>
+
+          {onClearAllTransactions && transactions.length > 0 && periodScope === 'all' && (
+            <button
+              onClick={onClearAllTransactions}
+              className="btn btn-danger"
+              style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+              title="Excluir todos os lançamentos e zerar o saldo"
+            >
+              <Trash2 size={14} />
+              <span>Zerar Tudo</span>
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* Alert banner if there are transactions in other months */}
+      {periodScope === 'month' && outOfMonthTransactions.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '12px',
+          background: 'rgba(99, 102, 241, 0.12)',
+          border: '1px solid rgba(99, 102, 241, 0.3)',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 16px',
+          marginBottom: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem' }}>
+            <AlertCircle size={18} color="var(--brand-primary-light)" />
+            <span>
+              Você possui <strong>{outOfMonthTransactions.length} lançamento(s)</strong> em outros meses ou datas que afetam o seu Saldo Geral.
+            </span>
+          </div>
+          <button
+            onClick={() => setPeriodScope('all')}
+            className="btn btn-secondary"
+            style={{ fontSize: '0.78rem', padding: '6px 12px' }}
+          >
+            Ver Todo o Histórico ({transactions.length})
+          </button>
+        </div>
+      )}
 
       {/* Filter and Search Bar */}
       <div style={{

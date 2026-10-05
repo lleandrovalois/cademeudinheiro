@@ -73,6 +73,14 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: 'ID não fornecido' }, { status: 400 });
     }
 
+    if (id === 'all') {
+      await db.execute({
+        sql: 'DELETE FROM transactions WHERE user_id = ?',
+        args: [session.userId]
+      });
+      return NextResponse.json({ success: true, message: 'Todos os lançamentos foram removidos' });
+    }
+
     await db.execute({
       sql: 'DELETE FROM transactions WHERE id = ? AND user_id = ?',
       args: [id, session.userId]

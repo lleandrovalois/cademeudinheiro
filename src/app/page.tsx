@@ -33,6 +33,7 @@ import {
   syncUserDataFromCloud,
   syncTransactionToCloud,
   deleteTransactionFromCloud,
+  clearAllTransactionsInCloud,
   syncRecurringBillToCloud,
   deleteRecurringBillFromCloud,
   syncInstallmentToCloud,
@@ -178,6 +179,24 @@ export default function Home() {
 
     if (currentUser && !currentUser.isGuest) {
       deleteTransactionFromCloud(id, currentUser.id);
+    }
+  };
+
+  const handleClearAllTransactions = async () => {
+    if (!appData) return;
+    if (!confirm('Deseja realmente apagar TODOS os lançamentos e zerar o saldo da sua conta? Essa ação não pode ser desfeita.')) {
+      return;
+    }
+
+    const updatedTxs: Transaction[] = [];
+    const updated = { ...appData, transactions: updatedTxs };
+    setAppData(updated);
+
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updatedTxs });
+
+    if (currentUser && !currentUser.isGuest) {
+      await clearAllTransactionsInCloud(currentUser.id);
     }
   };
 
@@ -594,9 +613,36 @@ export default function Home() {
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {recentTransactions.length === 0 ? (
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '10px 0' }}>
-                        Nenhum lançamento registrado neste mês.
-                      </span>
+                      <div style={{ padding: '8px 0' }}>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block' }}>
+                          Nenhum lançamento registrado neste mês.
+                        </span>
+                        {appData.transactions.length > 0 && (
+                          <div style={{
+                            marginTop: '10px',
+                            padding: '10px 12px',
+                            background: 'rgba(99, 102, 241, 0.1)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid rgba(99, 102, 241, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: '10px',
+                            flexWrap: 'wrap'
+                          }}>
+                            <span style={{ fontSize: '0.78rem', color: 'var(--brand-primary-light)' }}>
+                              💡 Você possui <strong>{appData.transactions.length} lançamento(s)</strong> em outros meses que compõem o seu Saldo Geral.
+                            </span>
+                            <button
+                              onClick={() => setActiveTab('transactions')}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 10px', fontSize: '0.74rem' }}
+                            >
+                              Ver Extrato
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                       recentTransactions.map(t => (
                         <div
@@ -717,6 +763,7 @@ export default function Home() {
               onDeleteTransaction={handleDeleteTransaction}
               onToggleStatus={handleToggleStatus}
               onOpenNewTransaction={() => openNewTransactionModal('expense')}
+              onClearAllTransactions={handleClearAllTransactions}
             />
           )}
 
@@ -860,6 +907,29 @@ export default function Home() {
                       style={{ fontSize: '0.8rem', padding: '8px 14px' }}
                     >
                       Carregar Exemplos Brasileiros nesta Conta
+                    </button>
+                  </div>
+
+                  {/* Clean up / Zero Balance Card */}
+                  <div style={{
+                    background: 'var(--bg-tertiary)',
+                    padding: '18px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(239, 68, 68, 0.25)'
+                  }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '6px', color: 'var(--color-expense)' }}>
+                      Zerar Lançamentos & Saldo da Conta
+                    </h4>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                      Apaga todos os lançamentos de teste registrados e redefine seu Saldo Geral e patrimônio para R$ 0,00 imediatamente.
+                    </p>
+
+                    <button
+                      onClick={handleClearAllTransactions}
+                      className="btn btn-danger"
+                      style={{ fontSize: '0.8rem', padding: '8px 14px' }}
+                    >
+                      Limpar Todos os Lançamentos (Zerar Saldo)
                     </button>
                   </div>
                 </div>
