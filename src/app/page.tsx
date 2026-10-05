@@ -35,14 +35,17 @@ import {
   deleteRecurringBillFromCloud,
   syncInstallmentToCloud,
   deleteInstallmentFromCloud,
+  syncBudgetToCloud,
+  syncGoalToCloud,
+  deleteGoalFromCloud,
   resetAllDataToDefault 
 } from '../lib/storage';
 import { getCurrentUser, signOutUser } from '../lib/auth';
-import { getSupabaseClient } from '../lib/supabaseClient';
 import { 
   Transaction, 
   RecurringBill, 
   InstallmentPurchase, 
+  SavingsGoal,
   TransactionType,
   AuthUser 
 } from '../types/finance';
@@ -107,35 +110,6 @@ export default function Home() {
     };
 
     initApp();
-
-    // Listen to Supabase auth state change events
-    const supabase = getSupabaseClient();
-    if (supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const authUser: AuthUser = {
-            id: session.user.id,
-            email: session.user.email || '',
-            name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
-            isGuest: false
-          };
-          setCurrentUser(authUser);
-          const data = initializeStorage(authUser.id);
-          setAppData(data);
-          setIsCheckingAuth(false);
-          const cloudData = await syncUserDataFromCloud(authUser.id);
-          if (cloudData) setAppData(cloudData);
-        } else if (event === 'SIGNED_OUT') {
-          setCurrentUser(null);
-          setAppData(null);
-          setIsCheckingAuth(false);
-        }
-      });
-
-      return () => {
-        subscription.unsubscribe();
-      };
-    }
   }, []);
 
   const toggleHideValues = () => {
@@ -380,6 +354,7 @@ export default function Home() {
   // Budget & Goal Actions
   const handleUpdateBudget = (category: string, newLimit: number) => {
     if (!appData) return;
+    const targetBudget = appData.budgets.find(b => b.category === category);
     const updated = appData.budgets.map(b => {
       if (b.category === category) return { ...b, monthlyLimit: newLimit };
       return b;
@@ -387,19 +362,33 @@ export default function Home() {
     setAppData({ ...appData, budgets: updated });
     const userId = currentUser?.id || 'guest';
     saveUserData(userId, { budgets: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      const budgetToSync = targetBudget 
+        ? { ...targetBudget, monthlyLimit: newLimit }
+        : { id: `bdg-${Date.now()}`, category, monthlyLimit: newLimit, month: currentMonth };
+      syncBudgetToCloud(budgetToSync, currentUser.id);
+    }
   };
 
   const handleAddFundsToGoal = (goalId: string, amount: number) => {
     if (!appData) return;
+    let targetGoal: SavingsGoal | null = null;
     const updated = appData.goals.map(g => {
       if (g.id === goalId) {
-        return { ...g, currentAmount: g.currentAmount + amount };
+        const up = { ...g, currentAmount: g.currentAmount + amount };
+        targetGoal = up;
+        return up;
       }
       return g;
     });
     setAppData({ ...appData, goals: updated });
     const userId = currentUser?.id || 'guest';
     saveUserData(userId, { goals: updated });
+
+    if (targetGoal && currentUser && !currentUser.isGuest) {
+      syncGoalToCloud(targetGoal, currentUser.id);
+    }
   };
 
   const handleDeleteGoal = (id: string) => {
@@ -408,6 +397,10 @@ export default function Home() {
     setAppData({ ...appData, goals: updated });
     const userId = currentUser?.id || 'guest';
     saveUserData(userId, { goals: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      deleteGoalFromCloud(id, currentUser.id);
+    }
   };
 
   const handleRestoreData = (newData: AppDataState) => {

@@ -6,13 +6,19 @@ services:
     container_name: cademeudinheiro_app
     restart: unless-stopped
     ports:
-      - "${PORT:-3000}:3000"
+      - "${PORT:-3001}:3000"
+    volumes:
+      - cademeudinheiro_data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
       - HOSTNAME=0.0.0.0
-      - NEXT_PUBLIC_SUPABASE_URL=${NEXT_PUBLIC_SUPABASE_URL:-}
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=${NEXT_PUBLIC_SUPABASE_ANON_KEY:-}
+      - DATABASE_URL=file:/app/data/cademeudinheiro.db
+      - JWT_SECRET=${JWT_SECRET:-cademeudinheiro_jwt_secret_key_prod_2026}
     env_file:
       - path: .env
         required: false
+
+volumes:
+  cademeudinheiro_data:
+    driver: local

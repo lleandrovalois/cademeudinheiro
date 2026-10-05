@@ -15,7 +15,6 @@ import {
   DEFAULT_BUDGETS, 
   DEFAULT_GOALS 
 } from './mockData';
-import { getSupabaseClient } from './supabaseClient';
 
 export interface AppDataState {
   transactions: Transaction[];
@@ -35,7 +34,7 @@ function getUserKeys(userId: string = 'guest') {
     INSTALLMENTS: `cademeudinheiro_${userId}_installments`,
     BUDGETS: `cademeudinheiro_${userId}_budgets`,
     GOALS: `cademeudinheiro_${userId}_goals`,
-    INITIALIZED: `cademeudinheiro_${userId}_initialized_v2`
+    INITIALIZED: `cademeudinheiro_${userId}_initialized_v3`
   };
 }
 
@@ -48,7 +47,7 @@ export function initializeStorage(userId: string = 'guest'): AppDataState {
       installments: userId === 'guest' ? DEFAULT_INSTALLMENTS : [],
       budgets: userId === 'guest' ? DEFAULT_BUDGETS : [],
       goals: userId === 'guest' ? DEFAULT_GOALS : [],
-      isCloudConnected: false
+      isCloudConnected: true
     };
   }
 
@@ -85,7 +84,7 @@ export function initializeStorage(userId: string = 'guest'): AppDataState {
     installments,
     budgets,
     goals,
-    isCloudConnected: Boolean(getSupabaseClient())
+    isCloudConnected: true
   };
 }
 
@@ -124,91 +123,35 @@ export function saveUserData(userId: string, data: Partial<AppDataState>) {
   }
 }
 
-// Supabase synchronization helpers
+// Self-Hosted Server synchronization helpers
 export async function syncUserDataFromCloud(userId: string): Promise<AppDataState | null> {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return null;
+  if (userId === 'guest') return null;
 
   try {
-    const [txRes, recRes, instRes, bdgRes, goalRes, catRes] = await Promise.all([
-      supabase.from('transactions').select('*').order('date', { ascending: false }),
-      supabase.from('recurring_bills').select('*'),
-      supabase.from('installment_purchases').select('*'),
-      supabase.from('budgets').select('*'),
-      supabase.from('savings_goals').select('*'),
-      supabase.from('categories').select('*')
-    ]);
+    const res = await fetch('/api/data/sync', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store'
+    });
 
-    const remoteTxs: Transaction[] = (txRes.data || []).map(r => ({
-      id: r.id,
-      description: r.description,
-      amount: Number(r.amount),
-      type: r.type,
-      category: r.category,
-      date: r.date,
-      paymentMethod: r.payment_method,
-      status: r.status,
-      notes: r.notes || '',
-      installmentId: r.installment_id,
-      recurringId: r.recurring_id,
-      createdAt: r.created_at
-    }));
+    if (!res.ok) {
+      console.warn('Servidor retornou status:', res.status);
+      return null;
+    }
 
-    const remoteRec: RecurringBill[] = (recRes.data || []).map(r => ({
-      id: r.id,
-      title: r.title,
-      amount: Number(r.amount),
-      category: r.category,
-      dueDay: r.due_day,
-      frequency: r.frequency || 'monthly',
-      active: r.active ?? true,
-      notes: r.notes || '',
-      paidMonths: Array.isArray(r.paid_months) ? r.paid_months : [],
-      createdAt: r.created_at
-    }));
-
-    const remoteInst: InstallmentPurchase[] = (instRes.data || []).map(r => ({
-      id: r.id,
-      description: r.description,
-      totalAmount: Number(r.total_amount),
-      installmentAmount: Number(r.installment_amount),
-      totalInstallments: r.total_installments,
-      paidInstallments: r.paid_installments,
-      startDate: r.start_date,
-      category: r.category,
-      paymentCard: r.payment_card,
-      notes: r.notes || '',
-      createdAt: r.created_at
-    }));
-
-    const remoteBdg: Budget[] = (bdgRes.data || []).map(r => ({
-      id: r.id,
-      category: r.category,
-      monthlyLimit: Number(r.monthly_limit),
-      month: r.month
-    }));
-
-    const remoteGoals: SavingsGoal[] = (goalRes.data || []).map(r => ({
-      id: r.id,
-      title: r.title,
-      targetAmount: Number(r.target_amount),
-      currentAmount: Number(r.current_amount),
-      deadline: r.deadline,
-      color: r.color || '#10b981',
-      icon: r.icon || 'ShieldCheck'
-    }));
-
-    const categories: Category[] = (catRes.data && catRes.data.length > 0) 
-      ? catRes.data.map(c => ({ id: c.id, name: c.name, icon: c.icon, color: c.color, type: c.type }))
-      : DEFAULT_CATEGORIES;
+    const data = await res.json();
+    if (data.error) {
+      console.error('Erro na resposta do sync:', data.error);
+      return null;
+    }
 
     const cloudData: AppDataState = {
-      transactions: remoteTxs,
-      categories,
-      recurringBills: remoteRec,
-      installments: remoteInst,
-      budgets: remoteBdg,
-      goals: remoteGoals,
+      transactions: data.transactions || [],
+      categories: (data.categories && data.categories.length > 0) ? data.categories : DEFAULT_CATEGORIES,
+      recurringBills: data.recurringBills || [],
+      installments: data.installments || [],
+      budgets: data.budgets || [],
+      goals: data.goals || [],
       isCloudConnected: true
     };
 
@@ -216,30 +159,32 @@ export async function syncUserDataFromCloud(userId: string): Promise<AppDataStat
     saveUserData(userId, cloudData);
     return cloudData;
   } catch (err) {
-    console.error('Erro ao sincronizar com Supabase:', err);
+    console.error('Erro ao sincronizar com servidor Hostinger:', err);
     return null;
   }
 }
 
-// Write-through to Supabase
-export async function syncTransactionToCloud(tx: Transaction, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+export async function syncWithSupabase(): Promise<{ success: boolean; message: string }> {
   try {
-    await supabase.from('transactions').upsert({
-      id: tx.id,
-      user_id: userId,
-      description: tx.description,
-      amount: tx.amount,
-      type: tx.type,
-      category: tx.category,
-      date: tx.date,
-      payment_method: tx.paymentMethod,
-      status: tx.status,
-      notes: tx.notes || null,
-      installment_id: tx.installmentId || null,
-      recurring_id: tx.recurringId || null
+    const res = await fetch('/api/data/sync');
+    if (res.ok) {
+      return { success: true, message: 'Banco de dados SQLite na Hostinger VPS sincronizado com sucesso!' };
+    }
+    return { success: false, message: 'Falha ao sincronizar com o banco de dados.' };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Falha na conexão';
+    return { success: false, message: msg };
+  }
+}
+
+// Write-through to Self-Hosted SQLite
+export async function syncTransactionToCloud(tx: Transaction, userId: string) {
+  if (userId === 'guest') return;
+  try {
+    await fetch('/api/data/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(tx)
     });
   } catch (err) {
     console.error('Falha ao sincronizar transação:', err);
@@ -247,32 +192,23 @@ export async function syncTransactionToCloud(tx: Transaction, userId: string) {
 }
 
 export async function deleteTransactionFromCloud(txId: string, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+  if (userId === 'guest') return;
   try {
-    await supabase.from('transactions').delete().eq('id', txId);
+    await fetch(`/api/data/transactions?id=${encodeURIComponent(txId)}`, {
+      method: 'DELETE'
+    });
   } catch (err) {
-    console.error('Falha ao remover transação no Supabase:', err);
+    console.error('Falha ao remover transação no servidor:', err);
   }
 }
 
 export async function syncRecurringBillToCloud(bill: RecurringBill, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+  if (userId === 'guest') return;
   try {
-    await supabase.from('recurring_bills').upsert({
-      id: bill.id,
-      user_id: userId,
-      title: bill.title,
-      amount: bill.amount,
-      category: bill.category,
-      due_day: bill.dueDay,
-      frequency: bill.frequency,
-      active: bill.active,
-      notes: bill.notes || null,
-      paid_months: bill.paidMonths
+    await fetch('/api/data/recurring', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bill)
     });
   } catch (err) {
     console.error('Falha ao sincronizar conta fixa:', err);
@@ -280,33 +216,23 @@ export async function syncRecurringBillToCloud(bill: RecurringBill, userId: stri
 }
 
 export async function deleteRecurringBillFromCloud(billId: string, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+  if (userId === 'guest') return;
   try {
-    await supabase.from('recurring_bills').delete().eq('id', billId);
+    await fetch(`/api/data/recurring?id=${encodeURIComponent(billId)}`, {
+      method: 'DELETE'
+    });
   } catch (err) {
-    console.error('Falha ao deletar conta fixa no Supabase:', err);
+    console.error('Falha ao deletar conta fixa no servidor:', err);
   }
 }
 
 export async function syncInstallmentToCloud(inst: InstallmentPurchase, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+  if (userId === 'guest') return;
   try {
-    await supabase.from('installment_purchases').upsert({
-      id: inst.id,
-      user_id: userId,
-      description: inst.description,
-      total_amount: inst.totalAmount,
-      installment_amount: inst.installmentAmount,
-      total_installments: inst.totalInstallments,
-      paid_installments: inst.paidInstallments,
-      start_date: inst.startDate,
-      category: inst.category,
-      payment_card: inst.paymentCard || null,
-      notes: inst.notes || null
+    await fetch('/api/data/installments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(inst)
     });
   } catch (err) {
     console.error('Falha ao sincronizar parcelamento:', err);
@@ -314,13 +240,50 @@ export async function syncInstallmentToCloud(inst: InstallmentPurchase, userId: 
 }
 
 export async function deleteInstallmentFromCloud(instId: string, userId: string) {
-  const supabase = getSupabaseClient();
-  if (!supabase || userId === 'guest') return;
-
+  if (userId === 'guest') return;
   try {
-    await supabase.from('installment_purchases').delete().eq('id', instId);
+    await fetch(`/api/data/installments?id=${encodeURIComponent(instId)}`, {
+      method: 'DELETE'
+    });
   } catch (err) {
-    console.error('Falha ao deletar parcelamento no Supabase:', err);
+    console.error('Falha ao deletar parcelamento no servidor:', err);
+  }
+}
+
+export async function syncBudgetToCloud(budget: Budget, userId: string) {
+  if (userId === 'guest') return;
+  try {
+    await fetch('/api/data/budgets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(budget)
+    });
+  } catch (err) {
+    console.error('Falha ao sincronizar orçamento:', err);
+  }
+}
+
+export async function syncGoalToCloud(goal: SavingsGoal, userId: string) {
+  if (userId === 'guest') return;
+  try {
+    await fetch('/api/data/goals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(goal)
+    });
+  } catch (err) {
+    console.error('Falha ao sincronizar meta:', err);
+  }
+}
+
+export async function deleteGoalFromCloud(goalId: string, userId: string) {
+  if (userId === 'guest') return;
+  try {
+    await fetch(`/api/data/goals?id=${encodeURIComponent(goalId)}`, {
+      method: 'DELETE'
+    });
+  } catch (err) {
+    console.error('Falha ao deletar meta no servidor:', err);
   }
 }
 
@@ -342,7 +305,7 @@ export function resetAllDataToDefault(userId: string = 'guest'): AppDataState {
     installments: DEFAULT_INSTALLMENTS,
     budgets: DEFAULT_BUDGETS,
     goals: DEFAULT_GOALS,
-    isCloudConnected: Boolean(getSupabaseClient())
+    isCloudConnected: true
   };
 }
 
@@ -385,23 +348,6 @@ export function calculateMonthlySummary(transactions: Transaction[], selectedMon
     pendingIncome,
     pendingExpense
   };
-}
-
-export async function syncWithSupabase(): Promise<{ success: boolean; message: string }> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    return { success: false, message: 'Supabase não configurado. Insira a URL e a Anon Key.' };
-  }
-  try {
-    const { error } = await supabase.from('transactions').select('id').limit(1);
-    if (error) {
-      return { success: false, message: `Erro ao conectar: ${error.message}` };
-    }
-    return { success: true, message: 'Conexão com o Supabase estabelecida com sucesso!' };
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'Falha na conexão';
-    return { success: false, message: msg };
-  }
 }
 
 export function exportToJSON(data: AppDataState) {

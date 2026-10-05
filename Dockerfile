@@ -1,6 +1,6 @@
 # ===================================================
 # Multi-stage Dockerfile para Next.js (Standalone)
-# Otimizado para Ubuntu 24.04 com Docker Compose
+# Otimizado para Ubuntu 24.04 com Docker Compose e SQLite
 # ===================================================
 
 # 1. Dependências
@@ -31,10 +31,12 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+ENV DATABASE_URL="file:/app/data/cademeudinheiro.db"
 
-# Cria usuário não-root por segurança
+# Cria usuário não-root por segurança e garante permissão no volume do SQLite
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 nextjs && \
+    mkdir -p /app/data && chown -R nextjs:nodejs /app/data
 
 # Copia arquivos estáticos públicos e o build standalone
 COPY --from=builder /app/public ./public
@@ -42,6 +44,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
+
+VOLUME ["/app/data"]
 
 EXPOSE 3000
 
