@@ -92,3 +92,10 @@ export interface CloudConfig {
   isConnected: boolean;
   syncMode: 'local' | 'cloud';
 }
+
+export interface AuthUser {
+  id: string;
+  email: string;
+  name?: string;
+  isGuest?: boolean;
+}

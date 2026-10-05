@@ -10,9 +10,12 @@ import {
   CloudSync, 
   PlusCircle,
   ShieldCheck,
-  TrendingUp
+  TrendingUp,
+  LogIn,
+  LogOut
 } from 'lucide-react';
 import { formatCurrency } from '../lib/formatters';
+import { AuthUser } from '../types/finance';
 
 interface SidebarProps {
   activeTab: string;
@@ -21,6 +24,9 @@ interface SidebarProps {
   hideValues: boolean;
   onOpenNewTransaction: () => void;
   isCloudConnected: boolean;
+  currentUser: AuthUser | null;
+  onOpenAuthModal: () => void;
+  onSignOut: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -29,7 +35,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalBalance,
   hideValues,
   onOpenNewTransaction,
-  isCloudConnected
+  isCloudConnected,
+  currentUser,
+  onOpenAuthModal,
+  onSignOut
 }) => {
   const navItems = [
     { id: 'dashboard', label: 'Visão Geral', icon: LayoutDashboard },
@@ -155,6 +164,66 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span>Dados criptografados localmente</span>
         </div>
       </div>
+
+      {/* User Profile Card */}
+      {currentUser && !currentUser.isGuest ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px',
+          borderRadius: 'var(--radius-md)',
+          background: 'var(--bg-tertiary)',
+          marginTop: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <div style={{
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              background: 'var(--brand-gradient)',
+              color: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 800,
+              fontSize: '0.8rem',
+              flexShrink: 0
+            }}>
+              {(currentUser.name || currentUser.email).slice(0, 2).toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser.name || currentUser.email.split('@')[0]}
+              </span>
+              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {currentUser.email}
+              </span>
+            </div>
+          </div>
+          <button 
+            onClick={() => {
+              if (confirm('Deseja realmente sair da sua conta?')) {
+                onSignOut();
+              }
+            }}
+            className="btn-icon" 
+            style={{ width: '28px', height: '28px' }} 
+            title="Sair da conta"
+          >
+            <LogOut size={13} color="var(--color-expense)" />
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={onOpenAuthModal}
+          className="btn btn-primary"
+          style={{ width: '100%', marginTop: '12px', padding: '10px', fontSize: '0.82rem' }}
+        >
+          <LogIn size={15} />
+          <span>Entrar / Criar Conta</span>
+        </button>
+      )}
 
       <style jsx>{`
         @media (min-width: 1024px) {

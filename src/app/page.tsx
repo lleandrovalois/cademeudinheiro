@@ -5,9 +5,9 @@ import {
   Plus, 
   ArrowRight, 
   CalendarClock, 
-  Sparkles,
   Zap,
-  TrendingUp
+  TrendingUp,
+  UserCheck
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
@@ -20,28 +20,36 @@ import { InstallmentsManager } from '../components/InstallmentsManager';
 import { BudgetsManager } from '../components/BudgetsManager';
 import { TransactionModal } from '../components/TransactionModal';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
+import { AuthModal } from '../components/AuthModal';
 
 import { 
   AppDataState, 
   initializeStorage, 
   calculateMonthlySummary, 
-  saveTransactionsLocal, 
-  saveRecurringBillsLocal, 
-  saveInstallmentsLocal, 
-  saveBudgetsLocal, 
-  saveGoalsLocal, 
+  saveUserData, 
+  syncUserDataFromCloud,
+  syncTransactionToCloud,
+  deleteTransactionFromCloud,
+  syncRecurringBillToCloud,
+  deleteRecurringBillFromCloud,
+  syncInstallmentToCloud,
+  deleteInstallmentFromCloud,
   resetAllDataToDefault 
 } from '../lib/storage';
+import { getCurrentUser, signOutUser } from '../lib/auth';
+import { getSupabaseClient } from '../lib/supabaseClient';
 import { 
   Transaction, 
   RecurringBill, 
   InstallmentPurchase, 
-  TransactionType 
+  TransactionType,
+  AuthUser 
 } from '../types/finance';
 import { formatCurrency } from '../lib/formatters';
 
 export default function Home() {
   const [appData, setAppData] = useState<AppDataState | null>(null);
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   
   // Selected month (default current YYYY-MM)
@@ -57,20 +65,69 @@ export default function Home() {
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [modalInitialType, setModalInitialType] = useState<TransactionType>('expense');
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
 
-  // Initialize storage and theme
+  // Initialize storage, auth and theme
   useEffect(() => {
-    const data = initializeStorage();
-    setAppData(data);
+    const initApp = async () => {
+      const user = await getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+        const data = initializeStorage(user.id);
+        setAppData(data);
 
-    const savedHide = localStorage.getItem('fincontrol_hide_values');
-    if (savedHide) setHideValues(savedHide === 'true');
+        // Fetch user data from Supabase in background
+        if (!user.isGuest) {
+          const cloudData = await syncUserDataFromCloud(user.id);
+          if (cloudData) setAppData(cloudData);
+        }
+      } else {
+        // Fallback to guest initially and offer login
+        const data = initializeStorage('guest');
+        setAppData(data);
+        setIsAuthModalOpen(true);
+      }
 
-    const savedTheme = localStorage.getItem('fincontrol_theme');
-    if (savedTheme) {
-      const dark = savedTheme === 'dark';
-      setIsDarkMode(dark);
-      document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      const savedHide = localStorage.getItem('fincontrol_hide_values');
+      if (savedHide) setHideValues(savedHide === 'true');
+
+      const savedTheme = localStorage.getItem('fincontrol_theme');
+      if (savedTheme) {
+        const dark = savedTheme === 'dark';
+        setIsDarkMode(dark);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      }
+    };
+
+    initApp();
+
+    // Listen to Supabase auth state change events
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' && session?.user) {
+          const authUser: AuthUser = {
+            id: session.user.id,
+            email: session.user.email || '',
+            name: session.user.user_metadata?.name || session.user.email?.split('@')[0],
+            isGuest: false
+          };
+          setCurrentUser(authUser);
+          const data = initializeStorage(authUser.id);
+          setAppData(data);
+          const cloudData = await syncUserDataFromCloud(authUser.id);
+          if (cloudData) setAppData(cloudData);
+        } else if (event === 'SIGNED_OUT') {
+          setCurrentUser(null);
+          const data = initializeStorage('guest');
+          setAppData(data);
+          setIsAuthModalOpen(true);
+        }
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
     }
   }, []);
 
@@ -91,6 +148,24 @@ export default function Home() {
     });
   };
 
+  const handleAuthSuccess = async (user: AuthUser) => {
+    setCurrentUser(user);
+    const data = initializeStorage(user.id);
+    setAppData(data);
+    if (!user.isGuest) {
+      const cloudData = await syncUserDataFromCloud(user.id);
+      if (cloudData) setAppData(cloudData);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOutUser();
+    setCurrentUser(null);
+    const data = initializeStorage('guest');
+    setAppData(data);
+    setIsAuthModalOpen(true);
+  };
+
   // Transaction Actions
   const handleSaveTransaction = (newTxData: Omit<Transaction, 'id' | 'createdAt'>) => {
     if (!appData) return;
@@ -101,26 +176,47 @@ export default function Home() {
     };
     const updated = [newTx, ...appData.transactions];
     setAppData({ ...appData, transactions: updated });
-    saveTransactionsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      syncTransactionToCloud(newTx, currentUser.id);
+    }
   };
 
   const handleDeleteTransaction = (id: string) => {
     if (!appData) return;
     const updated = appData.transactions.filter(t => t.id !== id);
     setAppData({ ...appData, transactions: updated });
-    saveTransactionsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      deleteTransactionFromCloud(id, currentUser.id);
+    }
   };
 
   const handleToggleStatus = (id: string) => {
     if (!appData) return;
+    let targetTx: Transaction | null = null;
     const updated = appData.transactions.map(t => {
       if (t.id === id) {
-        return { ...t, status: t.status === 'paid' ? 'pending' : 'paid' } as Transaction;
+        const toggled = { ...t, status: t.status === 'paid' ? 'pending' : 'paid' } as Transaction;
+        targetTx = toggled;
+        return toggled;
       }
       return t;
     });
+
     setAppData({ ...appData, transactions: updated });
-    saveTransactionsLocal(updated);
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updated });
+
+    if (targetTx && currentUser && !currentUser.isGuest) {
+      syncTransactionToCloud(targetTx, currentUser.id);
+    }
   };
 
   // Recurring Bill Actions
@@ -134,7 +230,13 @@ export default function Home() {
     };
     const updated = [newBill, ...appData.recurringBills];
     setAppData({ ...appData, recurringBills: updated });
-    saveRecurringBillsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { recurringBills: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      syncRecurringBillToCloud(newBill, currentUser.id);
+    }
   };
 
   const handleTogglePaidThisMonth = (billId: string) => {
@@ -164,7 +266,6 @@ export default function Home() {
         recurringId: bill.id,
         createdAt: new Date().toISOString()
       };
-      // Check if already in transactions
       if (!updatedTransactions.some(t => t.recurringId === bill.id && t.date.startsWith(currentMonth))) {
         updatedTransactions = [autoTx, ...updatedTransactions];
       }
@@ -176,15 +277,27 @@ export default function Home() {
     });
 
     setAppData({ ...appData, recurringBills: updatedBills, transactions: updatedTransactions });
-    saveRecurringBillsLocal(updatedBills);
-    saveTransactionsLocal(updatedTransactions);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { recurringBills: updatedBills, transactions: updatedTransactions });
+
+    if (currentUser && !currentUser.isGuest) {
+      const updatedBill = updatedBills.find(b => b.id === billId);
+      if (updatedBill) syncRecurringBillToCloud(updatedBill, currentUser.id);
+    }
   };
 
   const handleDeleteRecurringBill = (id: string) => {
     if (!appData) return;
     const updated = appData.recurringBills.filter(b => b.id !== id);
     setAppData({ ...appData, recurringBills: updated });
-    saveRecurringBillsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { recurringBills: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      deleteRecurringBillFromCloud(id, currentUser.id);
+    }
   };
 
   // Installment Actions
@@ -215,27 +328,48 @@ export default function Home() {
     const updatedTxs = [firstTx, ...appData.transactions];
 
     setAppData({ ...appData, installments: updated, transactions: updatedTxs });
-    saveInstallmentsLocal(updated);
-    saveTransactionsLocal(updatedTxs);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { installments: updated, transactions: updatedTxs });
+
+    if (currentUser && !currentUser.isGuest) {
+      syncInstallmentToCloud(newInst, currentUser.id);
+      syncTransactionToCloud(firstTx, currentUser.id);
+    }
   };
 
   const handleAdvanceInstallment = (id: string) => {
     if (!appData) return;
+    let targetInst: InstallmentPurchase | null = null;
     const updated = appData.installments.map(i => {
       if (i.id === id && i.paidInstallments < i.totalInstallments) {
-        return { ...i, paidInstallments: i.paidInstallments + 1 };
+        const adv = { ...i, paidInstallments: i.paidInstallments + 1 };
+        targetInst = adv;
+        return adv;
       }
       return i;
     });
     setAppData({ ...appData, installments: updated });
-    saveInstallmentsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { installments: updated });
+
+    if (targetInst && currentUser && !currentUser.isGuest) {
+      syncInstallmentToCloud(targetInst, currentUser.id);
+    }
   };
 
   const handleDeleteInstallment = (id: string) => {
     if (!appData) return;
     const updated = appData.installments.filter(i => i.id !== id);
     setAppData({ ...appData, installments: updated });
-    saveInstallmentsLocal(updated);
+    
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { installments: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      deleteInstallmentFromCloud(id, currentUser.id);
+    }
   };
 
   // Budget & Goal Actions
@@ -246,7 +380,8 @@ export default function Home() {
       return b;
     });
     setAppData({ ...appData, budgets: updated });
-    saveBudgetsLocal(updated);
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { budgets: updated });
   };
 
   const handleAddFundsToGoal = (goalId: string, amount: number) => {
@@ -258,27 +393,27 @@ export default function Home() {
       return g;
     });
     setAppData({ ...appData, goals: updated });
-    saveGoalsLocal(updated);
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { goals: updated });
   };
 
   const handleDeleteGoal = (id: string) => {
     if (!appData) return;
     const updated = appData.goals.filter(g => g.id !== id);
     setAppData({ ...appData, goals: updated });
-    saveGoalsLocal(updated);
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { goals: updated });
   };
 
   const handleRestoreData = (newData: AppDataState) => {
     setAppData(newData);
-    saveTransactionsLocal(newData.transactions);
-    saveRecurringBillsLocal(newData.recurringBills);
-    saveInstallmentsLocal(newData.installments);
-    saveBudgetsLocal(newData.budgets);
-    saveGoalsLocal(newData.goals);
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, newData);
   };
 
   const handleResetToDemo = () => {
-    const reset = resetAllDataToDefault();
+    const userId = currentUser?.id || 'guest';
+    const reset = resetAllDataToDefault(userId);
     setAppData(reset);
   };
 
@@ -305,13 +440,11 @@ export default function Home() {
 
   const summary = calculateMonthlySummary(appData.transactions, currentMonth);
 
-  // Quick modals launchers
   const openNewTransactionModal = (type: TransactionType = 'expense') => {
     setModalInitialType(type);
     setIsTxModalOpen(true);
   };
 
-  // Recent 5 transactions for dashboard widget
   const recentTransactions = appData.transactions
     .filter(t => t.date.startsWith(currentMonth))
     .slice(0, 5);
@@ -326,6 +459,9 @@ export default function Home() {
         hideValues={hideValues}
         onOpenNewTransaction={() => openNewTransactionModal('expense')}
         isCloudConnected={appData.isCloudConnected}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setIsAuthModalOpen(true)}
+        onSignOut={handleSignOut}
       />
 
       {/* Main Content Area */}
@@ -340,6 +476,9 @@ export default function Home() {
           isCloudConnected={appData.isCloudConnected}
           onOpenCloudConfig={() => setIsCloudModalOpen(true)}
           onOpenNewTransaction={() => openNewTransactionModal('expense')}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setIsAuthModalOpen(true)}
+          onSignOut={handleSignOut}
         />
 
         {/* Tab Content Container */}
@@ -389,38 +528,44 @@ export default function Home() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {recentTransactions.map(t => (
-                      <div
-                        key={t.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 12px',
-                          borderRadius: 'var(--radius-md)',
-                          background: 'var(--bg-tertiary)'
-                        }}
-                      >
-                        <div style={{ minWidth: 0, flex: 1, marginRight: '10px' }}>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {t.description}
-                          </span>
-                          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                            {t.category} • {t.date.split('-').slice(1).reverse().join('/')}
-                          </span>
-                        </div>
+                    {recentTransactions.length === 0 ? (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '10px 0' }}>
+                        Nenhum lançamento registrado neste mês.
+                      </span>
+                    ) : (
+                      recentTransactions.map(t => (
+                        <div
+                          key={t.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            borderRadius: 'var(--radius-md)',
+                            background: 'var(--bg-tertiary)'
+                          }}
+                        >
+                          <div style={{ minWidth: 0, flex: 1, marginRight: '10px' }}>
+                            <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {t.description}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                              {t.category} • {t.date.split('-').slice(1).reverse().join('/')}
+                            </span>
+                          </div>
 
-                        <div style={{ textAlign: 'right' }}>
-                          <span style={{
-                            fontSize: '0.925rem',
-                            fontWeight: 800,
-                            color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)'
-                          }}>
-                            {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount, hideValues)}
-                          </span>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{
+                              fontSize: '0.925rem',
+                              fontWeight: 800,
+                              color: t.type === 'income' ? 'var(--color-income)' : 'var(--color-expense)'
+                            }}>
+                              {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount, hideValues)}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -442,41 +587,47 @@ export default function Home() {
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {appData.recurringBills.slice(0, 4).map(bill => {
-                      const isPaid = bill.paidMonths.includes(currentMonth);
-                      return (
-                        <div
-                          key={bill.id}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'space-between',
-                            padding: '10px 12px',
-                            borderRadius: 'var(--radius-md)',
-                            background: 'var(--bg-tertiary)',
-                            borderLeft: isPaid ? '3px solid var(--color-income)' : '3px solid var(--color-warning)'
-                          }}
-                        >
-                          <div>
-                            <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block' }}>
-                              {bill.title}
-                            </span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                              Vencimento dia {bill.dueDay}
-                            </span>
-                          </div>
+                    {appData.recurringBills.length === 0 ? (
+                      <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', padding: '10px 0' }}>
+                        Nenhuma conta fixa cadastrada.
+                      </span>
+                    ) : (
+                      appData.recurringBills.slice(0, 4).map(bill => {
+                        const isPaid = bill.paidMonths.includes(currentMonth);
+                        return (
+                          <div
+                            key={bill.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '10px 12px',
+                              borderRadius: 'var(--radius-md)',
+                              background: 'var(--bg-tertiary)',
+                              borderLeft: isPaid ? '3px solid var(--color-income)' : '3px solid var(--color-warning)'
+                            }}
+                          >
+                            <div>
+                              <span style={{ fontSize: '0.88rem', fontWeight: 600, display: 'block' }}>
+                                {bill.title}
+                              </span>
+                              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                Vencimento dia {bill.dueDay}
+                              </span>
+                            </div>
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>
-                              {formatCurrency(bill.amount, hideValues)}
-                            </span>
-                            <span className={`badge ${isPaid ? 'badge-paid' : 'badge-pending'}`}>
-                              {isPaid ? 'Paga' : 'Pendente'}
-                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.9rem', fontWeight: 800 }}>
+                                {formatCurrency(bill.amount, hideValues)}
+                              </span>
+                              <span className={`badge ${isPaid ? 'badge-paid' : 'badge-pending'}`}>
+                                {isPaid ? 'Paga' : 'Pendente'}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
               </div>
@@ -538,7 +689,7 @@ export default function Home() {
               onUpdateBudget={handleUpdateBudget}
               onAddFundsToGoal={handleAddFundsToGoal}
               onDeleteGoal={handleDeleteGoal}
-              onOpenNewGoal={() => alert('Para criar uma nova meta, você pode usar o botão Novo Registro ou editar no painel.')}
+              onOpenNewGoal={() => alert('Para adicionar nova meta de economia, cadastre no painel.')}
             />
           )}
 
@@ -568,22 +719,44 @@ export default function Home() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Account state info */}
+                  <div style={{ background: 'var(--bg-tertiary)', padding: '16px', borderRadius: 'var(--radius-md)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Sua Conta</span>
+                      <span className={`badge ${currentUser && !currentUser.isGuest ? 'badge-paid' : 'badge-card'}`}>
+                        {currentUser && !currentUser.isGuest ? 'Autenticado' : 'Modo Convidado'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '10px' }}>
+                      {currentUser && !currentUser.isGuest 
+                        ? `Conectado como: ${currentUser.email}. Seus dados estão isolados e salvos na sua conta.`
+                        : 'Você está no modo de demonstração. Entre ou crie uma conta para sincronizar com segurança na nuvem.'}
+                    </span>
+                    {currentUser && !currentUser.isGuest ? (
+                      <button onClick={handleSignOut} className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
+                        Sair da Conta
+                      </button>
+                    ) : (
+                      <button onClick={() => setIsAuthModalOpen(true)} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '6px 12px' }}>
+                        Entrar ou Criar Minha Conta
+                      </button>
+                    )}
+                  </div>
+
                   <button
                     onClick={() => setIsCloudModalOpen(true)}
                     className="btn btn-primary"
                     style={{ padding: '14px', width: '100%', fontSize: '0.95rem' }}
                   >
-                    <span>Abrir Central de Conexão Supabase & Backup</span>
+                    <span>Configurar Conexão Supabase & Backup</span>
                   </button>
 
                   <div style={{ background: 'var(--bg-tertiary)', padding: '18px', borderRadius: 'var(--radius-md)' }}>
                     <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '6px' }}>
-                      Modo Atual de Armazenamento
+                      Armazenamento Local e Isolamento
                     </h4>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                      {appData.isCloudConnected 
-                        ? 'Sua aplicação está configurada com conexão Supabase ativa para sincronização na nuvem.'
-                        : 'Sua aplicação está operando em modo Local-First. Todos os dados permanecem salvos com segurança no seu navegador com suporte total a funcionamento offline.'}
+                      Cada conta de usuário possui seu próprio armazenamento isolado. Nenhum usuário tem acesso às finanças de outro.
                     </p>
 
                     <button
@@ -591,7 +764,7 @@ export default function Home() {
                       className="btn btn-secondary"
                       style={{ fontSize: '0.8rem', padding: '8px 14px' }}
                     >
-                      Restaurar Dados Demonstrativos Brasileiros
+                      Carregar Exemplos Brasileiros nesta Conta
                     </button>
                   </div>
                 </div>
@@ -636,6 +809,13 @@ export default function Home() {
         appData={appData}
         onRestoreData={handleRestoreData}
         onResetToDemo={handleResetToDemo}
+      />
+
+      {/* Modal: Auth (Login, Cadastro, Recuperação de Senha) */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
       />
     </div>
   );

@@ -14,6 +14,8 @@ import {
   Layers
 } from 'lucide-react';
 import { formatMonthYearBR } from '../lib/formatters';
+import { AuthUser } from '../types/finance';
+import { UserMenu } from './UserMenu';
 
 interface HeaderProps {
   currentMonth: string;
@@ -25,6 +27,9 @@ interface HeaderProps {
   isCloudConnected: boolean;
   onOpenCloudConfig: () => void;
   onOpenNewTransaction: () => void;
+  currentUser: AuthUser | null;
+  onOpenAuthModal: () => void;
+  onSignOut: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,7 +41,10 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDarkMode,
   isCloudConnected,
   onOpenCloudConfig,
-  onOpenNewTransaction
+  onOpenNewTransaction,
+  currentUser,
+  onOpenAuthModal,
+  onSignOut
 }) => {
   // Navigate previous / next month
   const handlePrevMonth = () => {
@@ -171,6 +179,13 @@ export const Header: React.FC<HeaderProps> = ({
             <Cloud size={18} />
           )}
         </button>
+
+        {/* User Auth Profile Menu */}
+        <UserMenu
+          currentUser={currentUser}
+          onOpenAuthModal={onOpenAuthModal}
+          onSignOut={onSignOut}
+        />
       </div>
 
       <style jsx>{`
