@@ -14,10 +14,13 @@ import {
   Calendar,
   CalendarClock,
   AlertCircle,
-  Pencil
+  Pencil,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 import { Transaction, Category } from '../types/finance';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, formatMonthYearBR } from '../lib/formatters';
+import { exportTransactionsToExcel, exportTransactionsToPDF } from '../lib/exportReports';
 
 interface TransactionsListProps {
   transactions: Transaction[];
@@ -146,6 +149,30 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
             >
               <CalendarClock size={13} />
               <span>Todo o Histórico ({transactions.length})</span>
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button
+              onClick={() => exportTransactionsToPDF(filteredTransactions, { monthStr: periodScope === 'month' ? currentMonth : undefined })}
+              disabled={filteredTransactions.length === 0}
+              className="btn btn-secondary"
+              style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Baixar PDF dos lançamentos filtrados"
+            >
+              <FileText size={15} color="#ef4444" />
+              <span>PDF</span>
+            </button>
+
+            <button
+              onClick={() => exportTransactionsToExcel(filteredTransactions, { monthStr: periodScope === 'month' ? currentMonth : undefined })}
+              disabled={filteredTransactions.length === 0}
+              className="btn btn-secondary"
+              style={{ padding: '8px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Baixar planilha Excel (.xlsx) dos lançamentos filtrados"
+            >
+              <FileSpreadsheet size={15} color="#10b981" />
+              <span>Excel</span>
             </button>
           </div>
 

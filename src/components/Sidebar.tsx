@@ -13,7 +13,8 @@ import {
   TrendingUp,
   LogIn,
   LogOut,
-  Bell
+  Bell,
+  FileSpreadsheet
 } from 'lucide-react';
 import { formatCurrency } from '../lib/formatters';
 import { AuthUser } from '../types/finance';
@@ -49,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'recurring', label: 'Despesas Fixas', icon: CalendarClock },
     { id: 'installments', label: 'Parcelamentos', icon: CreditCard },
     { id: 'budgets', label: 'Metas & Limites', icon: PieChart },
+    { id: 'reports', label: 'Relatórios & Exportar', icon: FileSpreadsheet },
     { id: 'notifications', label: 'Lembretes por E-mail', icon: Bell },
     { id: 'settings', label: 'Nuvem & Backup', icon: CloudSync }
   ];

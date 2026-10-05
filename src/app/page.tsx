@@ -20,6 +20,7 @@ import { TransactionsList } from '../components/TransactionsList';
 import { RecurringManager } from '../components/RecurringManager';
 import { InstallmentsManager } from '../components/InstallmentsManager';
 import { BudgetsManager } from '../components/BudgetsManager';
+import { ReportsManager } from '../components/ReportsManager';
 import { TransactionModal } from '../components/TransactionModal';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { AuthModal } from '../components/AuthModal';
@@ -865,7 +866,19 @@ export default function Home() {
             />
           )}
 
-          {/* TAB 6: SETTINGS & BACKUP */}
+          {/* TAB 6: REPORTS & EXPORTS */}
+          {activeTab === 'reports' && (
+            <ReportsManager
+              transactions={appData.transactions}
+              installments={appData.installments}
+              recurring={appData.recurringBills}
+              categories={appData.categories}
+              currentMonth={currentMonth}
+              currentUser={currentUser}
+            />
+          )}
+
+          {/* TAB 7: SETTINGS & BACKUP */}
           {activeTab === 'settings' && (
             <div style={{ maxWidth: '680px', margin: '0 auto' }}>
               <div className="glass-panel" style={{ padding: '28px' }}>

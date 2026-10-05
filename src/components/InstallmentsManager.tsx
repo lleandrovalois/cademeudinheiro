@@ -9,11 +9,14 @@ import {
   ChevronRight, 
   PartyPopper,
   CheckCircle2,
-  Pencil
+  Pencil,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InstallmentPurchase } from '../types/finance';
 import { formatCurrency, formatDateBR } from '../lib/formatters';
+import { exportInstallmentsToExcel, exportInstallmentsToPDF } from '../lib/exportReports';
 
 interface InstallmentsManagerProps {
   installments: InstallmentPurchase[];
@@ -87,10 +90,34 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
             </span>
           </div>
 
-          <button onClick={onOpenNewInstallment} className="btn btn-primary" style={{ padding: '10px 16px' }}>
-            <Plus size={16} />
-            <span>Novo Parcelamento</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button
+              onClick={() => exportInstallmentsToPDF(installments)}
+              disabled={installments.length === 0}
+              className="btn btn-secondary"
+              style={{ padding: '9px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Baixar relatório em PDF das compras parceladas"
+            >
+              <FileText size={15} color="#ef4444" />
+              <span>PDF</span>
+            </button>
+
+            <button
+              onClick={() => exportInstallmentsToExcel(installments)}
+              disabled={installments.length === 0}
+              className="btn btn-secondary"
+              style={{ padding: '9px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Baixar planilha Excel (.xlsx) das compras parceladas"
+            >
+              <FileSpreadsheet size={15} color="#10b981" />
+              <span>Excel</span>
+            </button>
+
+            <button onClick={onOpenNewInstallment} className="btn btn-primary" style={{ padding: '10px 16px' }}>
+              <Plus size={16} />
+              <span>Novo Parcelamento</span>
+            </button>
+          </div>
         </div>
 
         {/* Top 3 KPI Grid */}
