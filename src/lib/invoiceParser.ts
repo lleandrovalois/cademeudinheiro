@@ -8,6 +8,7 @@ export interface ParsedInvoiceItem {
   category: string;
   type: 'expense' | 'income';
   isPaymentOrCredit: boolean;
+  cardDigits?: string;
   installmentInfo?: {
     current: number;
     total: number;
@@ -21,6 +22,7 @@ export interface ParsedInvoiceResult {
   dueDate?: string;
   totalInvoiceAmount?: number;
   detectedMonth?: string;
+  detectedYear?: number;
   items: ParsedInvoiceItem[];
   ignoredCount: number;
 }
@@ -41,11 +43,11 @@ const MONTH_NAMES_BR: Record<string, string> = {
 };
 
 /**
- * Detect card name from raw text
+ * Detect card issuer/bank from raw text
  */
 export function detectCardName(text: string): string {
   const upper = text.toUpperCase();
-  if (upper.includes('NUBANK')) return 'Nubank';
+  if (upper.includes('NUBANK') || upper.includes('NU PAGAMENTOS')) return 'Nubank';
   if (upper.includes('ITAU') || upper.includes('ITAÚ')) return 'Itaú';
   if (upper.includes('BRADESCO')) return 'Bradesco';
   if (upper.includes('SANTANDER')) return 'Santander';
@@ -59,39 +61,74 @@ export function detectCardName(text: string): string {
 }
 
 /**
+ * Detect invoice reference year from headers (e.g., "FATURA 23 SET 2026")
+ */
+export function detectInvoiceYear(text: string): number {
+  const match = text.match(/(?:fatura|vencimento|per[ií]odo|emiss[aã]o)[\s\S]{0,30}\b(202\d|203\d)\b/i);
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  return new Date().getFullYear();
+}
+
+/**
  * Categorize description based on keywords
  */
 export function suggestCategory(description: string, categories: Category[]): string {
   const desc = description.toLowerCase();
 
-  // Keyword rules
   const mappings: { keywords: string[]; categoryKeyword: string }[] = [
     {
-      keywords: ['ifood', 'mercado', 'supermercado', 'carrefour', 'pao de acucar', 'extra', 'atacad', 'assai', 'dia%', 'restaurante', 'lanchonete', 'padaria', 'mcdonald', 'burger king', 'bk ', 'outback', 'pizza', 'acai', 'bar ', 'choperia', 'cafe', 'starbucks', 'hortifruti', 'acougue', 'rappi', 'ze delivery', 'sushi', 'subway', 'sorvete', 'doceria', 'mercearia'],
+      keywords: [
+        'ifood', 'mercado', 'supermercado', 'carrefour', 'pao de acucar', 'extra', 'atacad', 'assai', 
+        'restaurante', 'lanchonete', 'padaria', 'panificadora', 'mcdonald', 'burger king', 'bk ', 'outback', 
+        'pizza', 'acai', 'bar ', 'choperia', 'cafe', 'starbucks', 'hortifruti', 'acougue', 'rappi', 
+        'ze delivery', 'sushi', 'subway', 'sorvete', 'doceria', 'mercearia', 'belem'
+      ],
       categoryKeyword: 'alimenta'
     },
     {
-      keywords: ['uber', '99app', '99 ', 'posto', 'gasolina', 'combustivel', 'ipiranga', 'shell', 'petrobras', 'estacionamento', 'sem parar', 'conectcar', 'veloe', 'pedagio', 'auto posto', 'movida', 'localiza', 'rentcars', 'passagem', 'voe', 'latam', 'gol ', 'azul '],
+      keywords: [
+        'uber', '99app', '99 ', 'posto', 'gasolina', 'combustivel', 'ipiranga', 'shell', 'petrobras', 
+        'estacionamento', 'sem parar', 'conectcar', 'veloe', 'pedagio', 'auto posto', 'movida', 'localiza', 
+        'rentcars', 'passagem', 'voe', 'latam', 'gol ', 'azul ', 'royal enfield', 'oficina', 'mecanic'
+      ],
       categoryKeyword: 'transporte'
     },
     {
-      keywords: ['droga', 'drogasil', 'droga raia', 'pague menos', 'panvel', 'farmacia', 'hospital', 'clinica', 'medico', 'consulta', 'laboratorio', 'odonto', 'dentista', 'otica', 'psicolog', 'exame', 'terapia', 'nutricionista'],
+      keywords: [
+        'droga', 'drogasil', 'droga raia', 'pague menos', 'panvel', 'farmacia', 'hospital', 'clinica', 
+        'medico', 'consulta', 'laboratorio', 'odonto', 'dentista', 'otica', 'psicolog', 'exame', 'terapia', 'nutricionista'
+      ],
       categoryKeyword: 'saude'
     },
     {
-      keywords: ['netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'max ', 'youtube', 'cinema', 'ingresso', 'show', 'steam', 'playstation', 'xbox', 'apple.com', 'google storage', 'crunchyroll', 'deezer', 'globo', 'jogos', 'games'],
+      keywords: [
+        'netflix', 'spotify', 'amazon prime', 'disney', 'hbo', 'max ', 'youtube', 'youtubepremium', 'cinema', 
+        'ingresso', 'show', 'steam', 'playstation', 'xbox', 'apple.com', 'google one', 'google storage', 
+        'kindle', 'crunchyroll', 'deezer', 'globo', 'jogos', 'games', 'salao', 'barbearia', 'beleza'
+      ],
       categoryKeyword: 'lazer'
     },
     {
-      keywords: ['enel', 'light', 'cpfl', 'cemig', 'sabesp', 'sanepar', 'copasa', 'comgas', 'aluguel', 'condominio', 'iptu', 'energia', 'agua', 'gas ', 'internet', 'claro', 'vivo', 'tim ', 'oi '],
+      keywords: [
+        'enel', 'light', 'cpfl', 'cemig', 'sabesp', 'sanepar', 'copasa', 'comgas', 'aluguel', 'condominio', 
+        'iptu', 'energia', 'agua', 'gas ', 'internet', 'claro', 'vivo', 'tim ', 'oi '
+      ],
       categoryKeyword: 'moradia'
     },
     {
-      keywords: ['curso', 'escola', 'faculdade', 'universidade', 'udemy', 'alura', 'livraria', 'livro', 'idiomas', 'colegio', 'educa'],
+      keywords: [
+        'curso', 'escola', 'faculdade', 'universidade', 'udemy', 'alura', 'livraria', 'livro', 'idiomas', 'colegio', 'educa'
+      ],
       categoryKeyword: 'educa'
     },
     {
-      keywords: ['magalu', 'magazine luiza', 'mercado livre', 'mercadolivre', 'amazon', 'shopee', 'shein', 'aliexpress', 'zara', 'renner', 'c&a', 'riachuelo', 'centauro', 'nike', 'adidas', 'kabum', 'terabyte', 'pichau', 'fast shop', 'leroy', 'mobly', 'madeira'],
+      keywords: [
+        'shopee', 'magalu', 'magazine luiza', 'mercado livre', 'mercadolivre', 'amazon', 'shein', 
+        'aliexpress', 'zara', 'renner', 'c&a', 'riachuelo', 'centauro', 'nike', 'adidas', 'kabum', 
+        'terabyte', 'pichau', 'fast shop', 'leroy', 'mobly', 'madeira', 'kalunga', 'tactica', 'braskar'
+      ],
       categoryKeyword: 'compra'
     }
   ];
@@ -103,7 +140,6 @@ export function suggestCategory(description: string, categories: Category[]): st
     }
   }
 
-  // Fallbacks: find "Outros" or first category
   const fallback = categories.find(c => c.name.toLowerCase().includes('outro')) || categories[0];
   return fallback?.name || 'Alimentação & Mercado';
 }
@@ -122,103 +158,107 @@ function checkIfPaymentOrCredit(description: string): boolean {
     'pagamento efetuado',
     'reversao de',
     'estorno de',
-    'estorno '
+    'estorno ',
+    'saldo restante da fatura'
   ];
   return paymentKeywords.some(k => desc.includes(k));
 }
 
 /**
- * Parse an invoice text into structured transaction rows
+ * Parse credit card statement text into structured transactions
  */
 export function parseInvoiceText(rawText: string, categories: Category[]): ParsedInvoiceResult {
   const cardName = detectCardName(rawText);
+  const detectedYear = detectInvoiceYear(rawText);
   const lines = rawText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
   const items: ParsedInvoiceItem[] = [];
   let ignoredCount = 0;
-  const currentYear = new Date().getFullYear();
-
-  // Pattern 1: Lines with DD MMM (e.g., "12 OUT Uber *Trip R$ 24,90" or "12 OUT Uber *Trip 24,90")
-  // Pattern 2: Lines with DD/MM or DD/MM/YYYY (e.g., "12/10 Uber *Trip R$ 24,90")
-  const dateRegexTextMonth = /^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\s+(.+)$/i;
-  const dateRegexSlash = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/;
 
   lines.forEach((line, index) => {
-    // Check if line contains a monetary value at or near the end
-    // Match Brazilian amounts like R$ 1.250,50 or 1.250,50 or 45,90 or -45,90 or 45,90-
-    const amountMatch = line.match(/(?:R\$\s*)?(-?\s*\d{1,3}(?:\.\d{3})*,\d{2}|-?\s*\d+,\d{2})(?:\s*(-))?$/i);
+    // Match line ending with Brazilian currency amount:
+    // Supports R$ 88,00 | 88,00 | −R$ 2.274,97 | -R$ 2.274,97 | 2.274,97-
+    // Notice [−\-] covers ASCII minus (-) and Unicode minus (− / \u2212)
+    const amountMatch = line.match(/(?:[−\-–—]\s*)?(?:R\$\s*)?([−\-–—]?\s*\d{1,3}(?:\.\d{3})*,\d{2}|[−\-–—]?\s*\d+,\d{2})(?:\s*([−\-–—]))?$/i);
 
     if (!amountMatch) {
       return;
     }
 
-    const rawAmountStr = amountMatch[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const rawAmountStr = amountMatch[1]
+      .replace(/\s/g, '')
+      .replace(/[−\-–—]/g, '')
+      .replace(/\./g, '')
+      .replace(',', '.');
+
     let amount = parseFloat(rawAmountStr);
     if (isNaN(amount) || amount === 0) return;
 
-    // Handle trailing minus (some bank statements format as 45,90-)
-    if (amountMatch[2] === '-' || line.endsWith('-')) {
-      amount = -Math.abs(amount);
-    }
+    // Detect negative value (payments, refunds, discounts)
+    const isNegative = line.includes('−') || amountMatch[0].includes('-') || amountMatch[0].includes('−') || amountMatch[2] != null;
 
-    // The line content without the matched amount part
     const lineWithoutAmount = line.slice(0, line.lastIndexOf(amountMatch[0])).trim();
     if (!lineWithoutAmount) return;
 
     let day = '';
     let month = '';
-    let year = currentYear;
+    let year = detectedYear;
     let description = '';
 
-    // Test text month format (12 OUT ...)
-    const matchTextMonth = lineWithoutAmount.match(dateRegexTextMonth);
+    // Match Pattern 1: Date with text month (e.g., "16 AGO ...", "03 SET ...")
+    const matchTextMonth = lineWithoutAmount.match(/^(\d{1,2})\s+(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)[A-Z]*\s+(.+)$/i);
+    
+    // Match Pattern 2: Date with slash (e.g., "16/08 ...", "16/08/2026 ...")
+    const matchSlash = lineWithoutAmount.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/);
+
     if (matchTextMonth) {
       day = matchTextMonth[1].padStart(2, '0');
       const monthWord = matchTextMonth[2].toLowerCase();
       month = MONTH_NAMES_BR[monthWord] || '01';
       description = matchTextMonth[3].trim();
-    } else {
-      // Test slash format (12/10 ...)
-      const matchSlash = lineWithoutAmount.match(dateRegexSlash);
-      if (matchSlash) {
-        day = matchSlash[1].padStart(2, '0');
-        month = matchSlash[2].padStart(2, '0');
-        if (matchSlash[3]) {
-          const yr = matchSlash[3];
-          year = yr.length === 2 ? 2000 + parseInt(yr, 10) : parseInt(yr, 10);
-        }
-        description = matchSlash[4].trim();
+    } else if (matchSlash) {
+      day = matchSlash[1].padStart(2, '0');
+      month = matchSlash[2].padStart(2, '0');
+      if (matchSlash[3]) {
+        const yr = matchSlash[3];
+        year = yr.length === 2 ? 2000 + parseInt(yr, 10) : parseInt(yr, 10);
       }
-    }
-
-    // If no date was matched at the beginning, skip or ignore
-    if (!day || !month || !description) {
+      description = matchSlash[4].trim();
+    } else {
       ignoredCount++;
       return;
     }
 
-    // Check installment pattern in description (e.g., "MAGALU 02/10" or "SHOTGUN (11/48)" or "PARCELA 3/10")
-    const installmentMatch = description.match(/(?:parcela\s*)?\(?(\d{1,2})\/(\d{1,2})\)?$/i);
-    let installmentInfo: { current: number; total: number } | undefined;
+    // Strip card bullet dots and 4 digits (e.g., "•••• 5013 Description" or "**** 1835 Description")
+    let cardDigits: string | undefined;
+    const cardMatch = description.match(/^[•\.\*\s]+\s*(\d{4})\s*(.+)$/);
+    if (cardMatch) {
+      cardDigits = cardMatch[1];
+      description = cardMatch[2].trim();
+    }
 
-    if (installmentMatch) {
-      const cur = parseInt(installmentMatch[1], 10);
-      const tot = parseInt(installmentMatch[2], 10);
+    // Detect and parse installment info (e.g., "Fabriciobenjamin - Parcela 2/2" or "Tactical - Parcela 7/10" or "Magalu 2/10")
+    let installmentInfo: { current: number; total: number } | undefined;
+    const instMatch = description.match(/[-–—]?\s*(?:parcela\s*)?\(?(\d{1,2})\/(\d{1,2})\)?$/i);
+    if (instMatch) {
+      const cur = parseInt(instMatch[1], 10);
+      const tot = parseInt(instMatch[2], 10);
       if (tot > 1 && cur <= tot) {
         installmentInfo = { current: cur, total: tot };
+        // Clean the installment suffix from description for neat display
+        description = description.slice(0, description.lastIndexOf(instMatch[0])).trim();
       }
     }
 
-    const isCredit = amount < 0 || checkIfPaymentOrCredit(description);
-    const positiveAmount = Math.abs(amount);
-
-    // Skip general non-transaction noises
+    // Skip general non-transaction headers
     const lowerDesc = description.toLowerCase();
     if (lowerDesc.includes('saldo anterior') || lowerDesc.includes('total da fatura') || lowerDesc.includes('limite total') || lowerDesc.includes('vencimento em')) {
       ignoredCount++;
       return;
     }
 
+    const isCredit = isNegative || checkIfPaymentOrCredit(description);
+    const positiveAmount = Math.abs(amount);
     const itemDate = `${year}-${month}-${day}`;
     const category = suggestCategory(description, categories);
 
@@ -230,13 +270,14 @@ export function parseInvoiceText(rawText: string, categories: Category[]): Parse
       category,
       type: isCredit ? 'income' : 'expense',
       isPaymentOrCredit: isCredit,
+      cardDigits,
       installmentInfo,
       rawText: line,
-      selected: !isCredit // Exclude payments by default so they don't distort user's expenses
+      selected: !isCredit // Payments unselected by default so they don't double count expenses
     });
   });
 
-  // Calculate detected month
+  // Calculate detected dominant month
   let detectedMonth: string | undefined;
   if (items.length > 0) {
     const monthCounts: Record<string, number> = {};
@@ -251,6 +292,7 @@ export function parseInvoiceText(rawText: string, categories: Category[]): Parse
   return {
     cardName,
     detectedMonth,
+    detectedYear,
     items,
     ignoredCount
   };

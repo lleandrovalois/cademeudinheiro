@@ -136,7 +136,9 @@ export const InvoiceImportModal: React.FC<InvoiceImportModalProps> = ({
       date: item.date,
       paymentMethod: 'credit_card',
       status: 'paid',
-      notes: `Importado da fatura ${cardName}` + (item.installmentInfo ? ` (Parcela ${item.installmentInfo.current}/${item.installmentInfo.total})` : '')
+      notes: `Fatura ${cardName}` + 
+        (item.cardDigits ? ` (Final ${item.cardDigits})` : '') + 
+        (item.installmentInfo ? ` [Parcela ${item.installmentInfo.current}/${item.installmentInfo.total}]` : '')
     }));
 
     onImportTransactions(newTransactions);
@@ -469,6 +471,11 @@ export const InvoiceImportModal: React.FC<InvoiceImportModalProps> = ({
                             {item.installmentInfo && (
                               <span style={{ fontSize: '0.68rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>
                                 💳 Parcela {item.installmentInfo.current} de {item.installmentInfo.total}
+                              </span>
+                            )}
+                            {item.cardDigits && (
+                              <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+                                🔒 Cartão •••• {item.cardDigits}
                               </span>
                             )}
                           </div>
