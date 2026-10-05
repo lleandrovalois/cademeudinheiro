@@ -2,6 +2,36 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+// Ensure browser globals required by pdfjs-dist / pdf-parse exist in Node.js runtime
+if (typeof (globalThis as unknown as { DOMMatrix?: unknown }).DOMMatrix === 'undefined') {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    (globalThis as unknown as { DOMMatrix: unknown }).DOMMatrix = require('dommatrix');
+  } catch {
+    (globalThis as unknown as { DOMMatrix: unknown }).DOMMatrix = class DOMMatrix {
+      a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+      m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
+      constructor(init?: number[]) {
+        if (Array.isArray(init)) {
+          this.a = init[0] ?? 1; this.b = init[1] ?? 0;
+          this.c = init[2] ?? 0; this.d = init[3] ?? 1;
+          this.e = init[4] ?? 0; this.f = init[5] ?? 0;
+        }
+      }
+      multiply() { return this; }
+      translate() { return this; }
+      scale() { return this; }
+      rotate() { return this; }
+      inverse() { return this; }
+      transformPoint(p: unknown) { return p; }
+    };
+  }
+}
+
+if (typeof (globalThis as unknown as { Path2D?: unknown }).Path2D === 'undefined') {
+  (globalThis as unknown as { Path2D: unknown }).Path2D = class Path2D {};
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
