@@ -22,6 +22,7 @@ import { TransactionModal } from '../components/TransactionModal';
 import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { AuthModal } from '../components/AuthModal';
 import { AuthScreen } from '../components/AuthScreen';
+import { EmailNotificationModal } from '../components/EmailNotificationModal';
 
 import { 
   AppDataState, 
@@ -71,6 +72,7 @@ export default function Home() {
   const [modalInitialType, setModalInitialType] = useState<TransactionType>('expense');
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
 
   // Initialize storage, auth and theme
   useEffect(() => {
@@ -479,6 +481,7 @@ export default function Home() {
           onToggleDarkMode={toggleDarkMode}
           isCloudConnected={appData.isCloudConnected}
           onOpenCloudConfig={() => setIsCloudModalOpen(true)}
+          onOpenNotificationModal={() => setIsEmailModalOpen(true)}
           onOpenNewTransaction={() => openNewTransactionModal('expense')}
           currentUser={currentUser}
           onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -841,6 +844,13 @@ export default function Home() {
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
         onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Modal: Email Reminders & Notifications */}
+      <EmailNotificationModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        currentUser={currentUser}
       />
     </div>
   );

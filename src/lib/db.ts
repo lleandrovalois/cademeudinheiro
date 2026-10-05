@@ -34,6 +34,7 @@ export async function ensureDbInitialized() {
       email TEXT UNIQUE NOT NULL,
       name TEXT,
       password_hash TEXT NOT NULL,
+      email_notifications_enabled INTEGER DEFAULT 1,
       created_at TEXT NOT NULL
     );`,
 
@@ -111,16 +112,34 @@ export async function ensureDbInitialized() {
       icon TEXT NOT NULL
     );`,
 
+    `CREATE TABLE IF NOT EXISTS email_notifications (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      sent_date TEXT NOT NULL,
+      bill_count INTEGER NOT NULL,
+      total_amount REAL NOT NULL,
+      created_at TEXT NOT NULL
+    );`,
+
     `CREATE INDEX IF NOT EXISTS idx_tx_user_date ON transactions(user_id, date);`,
     `CREATE INDEX IF NOT EXISTS idx_rec_user ON recurring_bills(user_id);`,
     `CREATE INDEX IF NOT EXISTS idx_inst_user ON installment_purchases(user_id);`,
     `CREATE INDEX IF NOT EXISTS idx_cat_user ON categories(user_id);`,
     `CREATE INDEX IF NOT EXISTS idx_bdg_user_month ON budgets(user_id, month);`,
-    `CREATE INDEX IF NOT EXISTS idx_goals_user ON savings_goals(user_id);`
+    `CREATE INDEX IF NOT EXISTS idx_goals_user ON savings_goals(user_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_email_user_date ON email_notifications(user_id, sent_date);`
   ];
 
   for (const sql of statements) {
     await db.execute(sql);
+  }
+
+  // Gracefully add email_notifications_enabled to existing tables if not present
+  try {
+    await db.execute(`ALTER TABLE users ADD COLUMN email_notifications_enabled INTEGER DEFAULT 1;`);
+  } catch {
+    // Column already exists, safe to ignore
   }
 
   isInitialized = true;

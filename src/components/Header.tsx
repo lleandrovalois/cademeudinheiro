@@ -11,7 +11,8 @@ import {
   Cloud, 
   CloudCheck, 
   Plus, 
-  Layers
+  Layers,
+  Bell
 } from 'lucide-react';
 import { formatMonthYearBR } from '../lib/formatters';
 import { AuthUser } from '../types/finance';
@@ -26,6 +27,7 @@ interface HeaderProps {
   onToggleDarkMode: () => void;
   isCloudConnected: boolean;
   onOpenCloudConfig: () => void;
+  onOpenNotificationModal?: () => void;
   onOpenNewTransaction: () => void;
   currentUser: AuthUser | null;
   onOpenAuthModal: () => void;
@@ -41,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleDarkMode,
   isCloudConnected,
   onOpenCloudConfig,
+  onOpenNotificationModal,
   onOpenNewTransaction,
   currentUser,
   onOpenAuthModal,
@@ -162,6 +165,28 @@ export const Header: React.FC<HeaderProps> = ({
           {isDarkMode ? <Sun size={18} color="#f59e0b" /> : <Moon size={18} />}
         </button>
 
+        {/* Email Reminders & Notifications */}
+        {onOpenNotificationModal && (
+          <button 
+            onClick={onOpenNotificationModal}
+            className="btn-icon"
+            title="Lembretes por E-mail no Vencimento"
+            aria-label="Lembretes por E-mail"
+            style={{ position: 'relative' }}
+          >
+            <Bell size={18} color="var(--brand-primary-light)" />
+            <span style={{
+              position: 'absolute',
+              top: '4px',
+              right: '4px',
+              width: '7px',
+              height: '7px',
+              borderRadius: '50%',
+              backgroundColor: '#10b981'
+            }} />
+          </button>
+        )}
+
         {/* Cloud Sync Status / Settings */}
         <button 
           onClick={onOpenCloudConfig}
@@ -170,8 +195,8 @@ export const Header: React.FC<HeaderProps> = ({
             borderColor: isCloudConnected ? 'rgba(16, 185, 129, 0.4)' : 'var(--border-subtle)',
             background: isCloudConnected ? 'var(--color-income-bg)' : 'var(--bg-tertiary)'
           }}
-          title={isCloudConnected ? 'Supabase Conectado' : 'Configurar Nuvem (Supabase / Backup)'}
-          aria-label="Configuração de Nuvem e Backup"
+          title={isCloudConnected ? 'Banco de Dados SQLite VPS Ativo' : 'Configurar Banco de Dados / Backup'}
+          aria-label="Configuração de Banco de Dados e Backup"
         >
           {isCloudConnected ? (
             <CloudCheck size={18} color="var(--color-income)" />

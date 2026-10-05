@@ -7,19 +7,22 @@ import {
   LogIn, 
   ShieldCheck, 
   ChevronDown,
-  Sparkles
+  Sparkles,
+  Bell
 } from 'lucide-react';
 import { AuthUser } from '../types/finance';
 
 interface UserMenuProps {
   currentUser: AuthUser | null;
   onOpenAuthModal: () => void;
+  onOpenNotificationModal?: () => void;
   onSignOut: () => void;
 }
 
 export const UserMenu: React.FC<UserMenuProps> = ({
   currentUser,
   onOpenAuthModal,
+  onOpenNotificationModal,
   onSignOut
 }) => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -111,6 +114,35 @@ export const UserMenu: React.FC<UserMenuProps> = ({
                 <span>Conta Autenticada</span>
               </div>
             </div>
+
+            {onOpenNotificationModal && (
+              <button
+                onClick={() => {
+                  setDropdownOpen(false);
+                  onOpenNotificationModal();
+                }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '8px 10px',
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.825rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--bg-tertiary)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+              >
+                <Bell size={15} color="var(--brand-primary-light)" />
+                <span>Lembretes por E-mail</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
