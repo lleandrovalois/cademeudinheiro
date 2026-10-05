@@ -7,7 +7,8 @@ import {
   AlertCircle, 
   Plus, 
   Trash2, 
-  Check
+  Check,
+  Bell
 } from 'lucide-react';
 import { RecurringBill } from '../types/finance';
 import { formatCurrency } from '../lib/formatters';
@@ -19,6 +20,7 @@ interface RecurringManagerProps {
   onTogglePaidThisMonth: (billId: string) => void;
   onDeleteRecurringBill: (billId: string) => void;
   onOpenNewRecurring: () => void;
+  onOpenNotificationModal?: () => void;
 }
 
 export const RecurringManager: React.FC<RecurringManagerProps> = ({
@@ -27,7 +29,8 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({
   hideValues,
   onTogglePaidThisMonth,
   onDeleteRecurringBill,
-  onOpenNewRecurring
+  onOpenNewRecurring,
+  onOpenNotificationModal
 }) => {
   const today = new Date();
   const currentDay = today.getDate();
@@ -41,6 +44,55 @@ export const RecurringManager: React.FC<RecurringManagerProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* Email Due Date Reminder Banner */}
+      {onOpenNotificationModal && (
+        <div style={{
+          padding: '16px 20px',
+          borderRadius: 'var(--radius-md)',
+          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%)',
+          border: '1px solid rgba(99, 102, 241, 0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '36px',
+              height: '36px',
+              borderRadius: '10px',
+              background: 'var(--brand-gradient)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#ffffff',
+              boxShadow: '0 4px 10px rgba(99, 102, 241, 0.3)',
+              flexShrink: 0
+            }}>
+              <Bell size={18} />
+            </div>
+            <div>
+              <strong style={{ fontSize: '0.92rem', color: 'var(--text-primary)', display: 'block' }}>
+                Lembretes por E-mail no Vencimento
+              </strong>
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                Receba um e-mail automático às 08:00 no dia em que suas contas vencerem
+              </span>
+            </div>
+          </div>
+
+          <button 
+            onClick={onOpenNotificationModal} 
+            className="btn btn-primary"
+            style={{ padding: '8px 16px', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+          >
+            <Bell size={14} />
+            <span>Configurar & Testar</span>
+          </button>
+        </div>
+      )}
+
       {/* Summary Banner */}
       <div className="glass-panel" style={{ padding: '24px' }}>
         <div style={{

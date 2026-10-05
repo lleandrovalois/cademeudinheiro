@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
           <h1 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, lineHeight: 1.2 }}>
             Cadê Meu <span style={{ color: 'var(--brand-primary-light)' }}>Dinheiro?</span>
           </h1>
-          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
+          <span className="header-brand-subtitle" style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
             Controle Descomplicado
           </span>
         </div>
@@ -166,26 +166,30 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         {/* Email Reminders & Notifications */}
-        {onOpenNotificationModal && (
-          <button 
-            onClick={onOpenNotificationModal}
-            className="btn-icon"
-            title="Lembretes por E-mail no Vencimento"
-            aria-label="Lembretes por E-mail"
-            style={{ position: 'relative' }}
-          >
-            <Bell size={18} color="var(--brand-primary-light)" />
-            <span style={{
-              position: 'absolute',
-              top: '4px',
-              right: '4px',
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: '#10b981'
-            }} />
-          </button>
-        )}
+        <button 
+          id="btn-header-notifications"
+          onClick={onOpenNotificationModal}
+          className="btn-icon"
+          title="Lembretes por E-mail no Vencimento"
+          aria-label="Lembretes por E-mail"
+          style={{ 
+            position: 'relative',
+            background: 'rgba(99, 102, 241, 0.15)',
+            borderColor: 'rgba(99, 102, 241, 0.4)'
+          }}
+        >
+          <Bell size={18} color="var(--brand-primary-light)" />
+          <span style={{
+            position: 'absolute',
+            top: '3px',
+            right: '3px',
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: '#10b981',
+            boxShadow: '0 0 6px #10b981'
+          }} />
+        </button>
 
         {/* Cloud Sync Status / Settings */}
         <button 
@@ -209,11 +213,17 @@ export const Header: React.FC<HeaderProps> = ({
         <UserMenu
           currentUser={currentUser}
           onOpenAuthModal={onOpenAuthModal}
+          onOpenNotificationModal={onOpenNotificationModal}
           onSignOut={onSignOut}
         />
       </div>
 
       <style jsx>{`
+        @media (max-width: 640px) {
+          .header-brand-subtitle {
+            display: none !important;
+          }
+        }
         @media (min-width: 768px) {
           #btn-desktop-quick-add {
             display: inline-flex !important;

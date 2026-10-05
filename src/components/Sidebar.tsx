@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   TrendingUp,
   LogIn,
-  LogOut
+  LogOut,
+  Bell
 } from 'lucide-react';
 import { formatCurrency } from '../lib/formatters';
 import { AuthUser } from '../types/finance';
@@ -23,6 +24,7 @@ interface SidebarProps {
   totalBalance: number;
   hideValues: boolean;
   onOpenNewTransaction: () => void;
+  onOpenNotificationModal?: () => void;
   isCloudConnected: boolean;
   currentUser: AuthUser | null;
   onOpenAuthModal: () => void;
@@ -35,6 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalBalance,
   hideValues,
   onOpenNewTransaction,
+  onOpenNotificationModal,
   isCloudConnected,
   currentUser,
   onOpenAuthModal,
@@ -46,6 +49,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'recurring', label: 'Despesas Fixas', icon: CalendarClock },
     { id: 'installments', label: 'Parcelamentos', icon: CreditCard },
     { id: 'budgets', label: 'Metas & Limites', icon: PieChart },
+    { id: 'notifications', label: 'Lembretes por E-mail', icon: Bell },
     { id: 'settings', label: 'Nuvem & Backup', icon: CloudSync }
   ];
 
@@ -121,7 +125,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           return (
             <button
               key={item.id}
-              onClick={() => onSelectTab(item.id)}
+              onClick={() => {
+                if (item.id === 'notifications') {
+                  if (onOpenNotificationModal) onOpenNotificationModal();
+                } else {
+                  onSelectTab(item.id);
+                }
+              }}
               style={{
                 display: 'flex',
                 alignItems: 'center',

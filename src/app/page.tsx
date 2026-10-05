@@ -7,7 +7,8 @@ import {
   CalendarClock, 
   Zap,
   TrendingUp,
-  UserCheck
+  UserCheck,
+  Bell
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
@@ -464,6 +465,7 @@ export default function Home() {
         totalBalance={summary.totalBalance}
         hideValues={hideValues}
         onOpenNewTransaction={() => openNewTransactionModal('expense')}
+        onOpenNotificationModal={() => setIsEmailModalOpen(true)}
         isCloudConnected={appData.isCloudConnected}
         currentUser={currentUser}
         onOpenAuthModal={() => setIsAuthModalOpen(true)}
@@ -692,6 +694,7 @@ export default function Home() {
               onTogglePaidThisMonth={handleTogglePaidThisMonth}
               onDeleteRecurringBill={handleDeleteRecurringBill}
               onOpenNewRecurring={() => setIsTxModalOpen(true)}
+              onOpenNotificationModal={() => setIsEmailModalOpen(true)}
             />
           )}
 
@@ -771,12 +774,41 @@ export default function Home() {
                     )}
                   </div>
 
+                  {/* Email Notifications Card */}
+                  <div style={{
+                    background: 'var(--bg-tertiary)',
+                    padding: '18px',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Bell size={18} color="var(--brand-primary-light)" />
+                        <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0 }}>
+                          Lembretes por E-mail no Vencimento
+                        </h4>
+                      </div>
+                      <span className="badge badge-paid">Ativo</span>
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '14px', lineHeight: 1.4 }}>
+                      Receba avisos no seu e-mail às 08:00 no dia em que suas despesas ou contas fixas vencerem.
+                    </p>
+                    <button
+                      onClick={() => setIsEmailModalOpen(true)}
+                      className="btn btn-primary"
+                      style={{ width: '100%', padding: '10px 14px', fontSize: '0.88rem' }}
+                    >
+                      <Bell size={16} />
+                      <span>Configurar Lembretes & Testar Envio</span>
+                    </button>
+                  </div>
+
                   <button
                     onClick={() => setIsCloudModalOpen(true)}
-                    className="btn btn-primary"
+                    className="btn btn-secondary"
                     style={{ padding: '14px', width: '100%', fontSize: '0.95rem' }}
                   >
-                    <span>Configurar Conexão Supabase & Backup</span>
+                    <span>Configurar Banco de Dados & Backup</span>
                   </button>
 
                   <div style={{ background: 'var(--bg-tertiary)', padding: '18px', borderRadius: 'var(--radius-md)' }}>
