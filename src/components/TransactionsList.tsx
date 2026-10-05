@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Pencil,
   FileSpreadsheet,
-  FileText
+  FileText,
+  UploadCloud
 } from 'lucide-react';
 import { Transaction, Category } from '../types/finance';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, formatMonthYearBR } from '../lib/formatters';
@@ -32,6 +33,7 @@ interface TransactionsListProps {
   onOpenNewTransaction: () => void;
   onClearAllTransactions?: () => void;
   onEditTransaction?: (tx: Transaction) => void;
+  onOpenImportInvoice?: () => void;
 }
 
 export const TransactionsList: React.FC<TransactionsListProps> = ({
@@ -43,7 +45,8 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
   onToggleStatus,
   onOpenNewTransaction,
   onClearAllTransactions,
-  onEditTransaction
+  onEditTransaction,
+  onOpenImportInvoice
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
@@ -175,6 +178,18 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
               <span>Excel</span>
             </button>
           </div>
+
+          {onOpenImportInvoice && (
+            <button
+              onClick={onOpenImportInvoice}
+              className="btn btn-secondary"
+              style={{ padding: '8px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              title="Importar fatura do cartão de crédito em PDF"
+            >
+              <UploadCloud size={15} color="var(--brand-primary-light)" />
+              <span>Importar Fatura PDF</span>
+            </button>
+          )}
 
           <button 
             onClick={onOpenNewTransaction}

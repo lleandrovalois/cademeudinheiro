@@ -26,6 +26,7 @@ import { SupabaseConfigModal } from '../components/SupabaseConfigModal';
 import { AuthModal } from '../components/AuthModal';
 import { AuthScreen } from '../components/AuthScreen';
 import { EmailNotificationModal } from '../components/EmailNotificationModal';
+import { InvoiceImportModal } from '../components/InvoiceImportModal';
 
 import { 
   AppDataState, 
@@ -78,6 +79,7 @@ export default function Home() {
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState<boolean>(false);
 
   // Editing state
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -203,6 +205,28 @@ export default function Home() {
 
     if (currentUser && !currentUser.isGuest) {
       await clearAllTransactionsInCloud(currentUser.id);
+    }
+  };
+
+  const handleImportInvoiceTransactions = async (newTxs: Omit<Transaction, 'id' | 'createdAt'>[]) => {
+    if (!appData) return;
+    const timestamp = Date.now();
+    const createdTransactions: Transaction[] = newTxs.map((tx, idx) => ({
+      ...tx,
+      id: `tx-inv-${timestamp}-${idx}-${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: new Date().toISOString()
+    }));
+
+    const updated = [...createdTransactions, ...appData.transactions];
+    setAppData({ ...appData, transactions: updated });
+
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      for (const tx of createdTransactions) {
+        syncTransactionToCloud(tx, currentUser.id).catch(err => console.error('Erro ao sincronizar transação importada:', err));
+      }
     }
   };
 
@@ -823,6 +847,7 @@ export default function Home() {
               onOpenNewTransaction={() => openNewTransactionModal('expense')}
               onClearAllTransactions={handleClearAllTransactions}
               onEditTransaction={handleOpenEditTransaction}
+              onOpenImportInvoice={() => setIsInvoiceModalOpen(true)}
             />
           )}
 
@@ -848,6 +873,7 @@ export default function Home() {
               onDeleteInstallment={handleDeleteInstallment}
               onOpenNewInstallment={() => openNewTransactionModal('expense', 'installment')}
               onEditInstallment={handleOpenEditInstallment}
+              onOpenImportInvoice={() => setIsInvoiceModalOpen(true)}
             />
           )}
 
@@ -1069,6 +1095,15 @@ export default function Home() {
         isOpen={isEmailModalOpen}
         onClose={() => setIsEmailModalOpen(false)}
         currentUser={currentUser}
+      />
+
+      {/* Modal: Credit Card Invoice PDF Import */}
+      <InvoiceImportModal
+        isOpen={isInvoiceModalOpen}
+        onClose={() => setIsInvoiceModalOpen(false)}
+        categories={appData.categories}
+        currentMonth={currentMonth}
+        onImportTransactions={handleImportInvoiceTransactions}
       />
     </div>
   );

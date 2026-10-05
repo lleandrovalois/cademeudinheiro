@@ -11,7 +11,8 @@ import {
   CheckCircle2,
   Pencil,
   FileSpreadsheet,
-  FileText
+  FileText,
+  UploadCloud
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InstallmentPurchase } from '../types/finance';
@@ -25,6 +26,7 @@ interface InstallmentsManagerProps {
   onDeleteInstallment: (installmentId: string) => void;
   onOpenNewInstallment: () => void;
   onEditInstallment?: (installment: InstallmentPurchase) => void;
+  onOpenImportInvoice?: () => void;
 }
 
 export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
@@ -33,7 +35,8 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
   onAdvanceInstallment,
   onDeleteInstallment,
   onOpenNewInstallment,
-  onEditInstallment
+  onEditInstallment,
+  onOpenImportInvoice
 }) => {
   // Metrics
   const activeInstallments = installments.filter(i => i.paidInstallments < i.totalInstallments);
@@ -112,6 +115,18 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
               <FileSpreadsheet size={15} color="#10b981" />
               <span>Excel</span>
             </button>
+
+            {onOpenImportInvoice && (
+              <button
+                onClick={onOpenImportInvoice}
+                className="btn btn-secondary"
+                style={{ padding: '9px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                title="Importar fatura do cartão de crédito em PDF"
+              >
+                <UploadCloud size={15} color="var(--brand-primary-light)" />
+                <span>Importar Fatura PDF</span>
+              </button>
+            )}
 
             <button onClick={onOpenNewInstallment} className="btn btn-primary" style={{ padding: '10px 16px' }}>
               <Plus size={16} />
