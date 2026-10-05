@@ -8,7 +8,8 @@ import {
   CreditCard, 
   CalendarClock, 
   Check, 
-  DollarSign
+  DollarSign,
+  Calculator
 } from 'lucide-react';
 import { 
   Transaction, 
@@ -18,6 +19,7 @@ import {
   TransactionType, 
   PaymentMethod 
 } from '../types/finance';
+import { formatCurrency } from '../lib/formatters';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -68,12 +70,67 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [notes, setNotes] = useState('');
 
   // Form State - Installment Purchase
+  const [installmentInputMode, setInstallmentInputMode] = useState<'total' | 'installment'>('total');
+  const [installmentAmountInput, setInstallmentAmountInput] = useState('');
   const [totalInstallments, setTotalInstallments] = useState('10');
   const [paymentCard, setPaymentCard] = useState('Nubank Ultravioleta');
   const [paidInstallments, setPaidInstallments] = useState('0');
 
   // Form State - Recurring Bill
   const [dueDay, setDueDay] = useState('10');
+
+  // Synchronization helpers between Total and Installment values
+  const handleSwitchInstallmentMode = (newMode: 'total' | 'installment') => {
+    if (newMode === installmentInputMode) return;
+    const count = Math.max(1, parseInt(totalInstallments, 10) || 1);
+
+    if (newMode === 'installment') {
+      const tot = parseFloat(amount.replace(',', '.'));
+      if (!isNaN(tot) && tot > 0) {
+        setInstallmentAmountInput((tot / count).toFixed(2));
+      }
+    } else {
+      const per = parseFloat(installmentAmountInput.replace(',', '.'));
+      if (!isNaN(per) && per > 0) {
+        setAmount((per * count).toFixed(2));
+      }
+    }
+    setInstallmentInputMode(newMode);
+  };
+
+  const handleTotalInstallmentsChange = (newCountStr: string) => {
+    setTotalInstallments(newCountStr);
+    const count = Math.max(1, parseInt(newCountStr, 10) || 1);
+    if (installmentInputMode === 'installment') {
+      const per = parseFloat(installmentAmountInput.replace(',', '.'));
+      if (!isNaN(per) && per > 0) {
+        setAmount((per * count).toFixed(2));
+      }
+    } else {
+      const tot = parseFloat(amount.replace(',', '.'));
+      if (!isNaN(tot) && tot > 0) {
+        setInstallmentAmountInput((tot / count).toFixed(2));
+      }
+    }
+  };
+
+  const handleInstallmentAmountChange = (valStr: string) => {
+    setInstallmentAmountInput(valStr);
+    const per = parseFloat(valStr.replace(',', '.'));
+    const count = Math.max(1, parseInt(totalInstallments, 10) || 1);
+    if (!isNaN(per) && per > 0) {
+      setAmount((per * count).toFixed(2));
+    }
+  };
+
+  const handleTotalAmountChange = (valStr: string) => {
+    setAmount(valStr);
+    const tot = parseFloat(valStr.replace(',', '.'));
+    const count = Math.max(1, parseInt(totalInstallments, 10) || 1);
+    if (!isNaN(tot) && tot > 0) {
+      setInstallmentAmountInput((tot / count).toFixed(2));
+    }
+  };
 
   React.useEffect(() => {
     if (isOpen) {
@@ -89,8 +146,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setNotes(editingTransaction.notes || '');
       } else if (editingInstallment) {
         setModalTab('installment');
+        setInstallmentInputMode('total');
         setDescription(editingInstallment.description);
         setAmount(editingInstallment.totalAmount.toString());
+        setInstallmentAmountInput(editingInstallment.installmentAmount.toString());
         setTotalInstallments(editingInstallment.totalInstallments.toString());
         setPaidInstallments(editingInstallment.paidInstallments.toString());
         setPaymentCard(editingInstallment.paymentCard || '');
@@ -102,6 +161,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         if (initialType) setTxType(initialType);
         setDescription('');
         setAmount('');
+        setInstallmentAmountInput('');
+        setInstallmentInputMode('total');
         setNotes('');
         setPaidInstallments('0');
         const today = new Date().toISOString().slice(0, 10);
@@ -114,13 +175,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = parseFloat(amount.replace(',', '.'));
-    if (!description.trim() || isNaN(numAmount) || numAmount <= 0) {
-      alert('Por favor, preencha a descrição e um valor válido.');
+
+    if (!description.trim()) {
+      alert('Por favor, preencha a descrição.');
       return;
     }
 
     if (modalTab === 'transaction') {
+      const numAmount = parseFloat(amount.replace(',', '.'));
+      if (isNaN(numAmount) || numAmount <= 0) {
+        alert('Por favor, informe um valor válido.');
+        return;
+      }
+
       if (editingTransaction && onUpdateTransaction) {
         onUpdateTransaction({
           ...editingTransaction,
@@ -146,16 +213,36 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         });
       }
     } else if (modalTab === 'installment') {
-      const installmentsCount = parseInt(totalInstallments, 10) || 2;
-      const installmentAmount = +(numAmount / installmentsCount).toFixed(2);
+      const installmentsCount = Math.max(1, parseInt(totalInstallments, 10) || 1);
+      let calculatedTotal = 0;
+      let calculatedInstallmentAmount = 0;
+
+      if (installmentInputMode === 'installment') {
+        const perInst = parseFloat(installmentAmountInput.replace(',', '.'));
+        if (isNaN(perInst) || perInst <= 0) {
+          alert('Por favor, informe um valor de parcela válido.');
+          return;
+        }
+        calculatedInstallmentAmount = perInst;
+        calculatedTotal = +(perInst * installmentsCount).toFixed(2);
+      } else {
+        const total = parseFloat(amount.replace(',', '.'));
+        if (isNaN(total) || total <= 0) {
+          alert('Por favor, informe um valor total válido.');
+          return;
+        }
+        calculatedTotal = total;
+        calculatedInstallmentAmount = +(total / installmentsCount).toFixed(2);
+      }
+
       const paidCount = Math.max(0, parseInt(paidInstallments, 10) || 0);
 
       if (editingInstallment && onUpdateInstallment) {
         onUpdateInstallment({
           ...editingInstallment,
           description: description.trim(),
-          totalAmount: numAmount,
-          installmentAmount,
+          totalAmount: calculatedTotal,
+          installmentAmount: calculatedInstallmentAmount,
           totalInstallments: installmentsCount,
           paidInstallments: paidCount,
           startDate: date,
@@ -166,8 +253,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       } else {
         onSaveInstallment({
           description: description.trim(),
-          totalAmount: numAmount,
-          installmentAmount,
+          totalAmount: calculatedTotal,
+          installmentAmount: calculatedInstallmentAmount,
           totalInstallments: installmentsCount,
           paidInstallments: paidCount,
           startDate: date,
@@ -177,6 +264,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         });
       }
     } else if (modalTab === 'recurring') {
+      const numAmount = parseFloat(amount.replace(',', '.'));
+      if (isNaN(numAmount) || numAmount <= 0) {
+        alert('Por favor, informe um valor válido.');
+        return;
+      }
+
       onSaveRecurring({
         title: description.trim(),
         amount: numAmount,
@@ -191,6 +284,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     // Reset and close
     setDescription('');
     setAmount('');
+    setInstallmentAmountInput('');
+    setInstallmentInputMode('total');
     setNotes('');
     setPaidInstallments('0');
     onClose();
@@ -355,35 +450,168 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit}>
-          {/* Amount Input */}
-          <div className="form-group">
-            <label className="form-label">
-              {modalTab === 'installment' ? 'Valor Total da Compra (R$)' : 'Valor (R$)'}
-            </label>
-            <div style={{ position: 'relative' }}>
-              <div style={{
-                position: 'absolute',
-                left: '14px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: 'var(--text-muted)'
-              }}>
-                <DollarSign size={18} />
-              </div>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                placeholder="0,00"
-                value={amount}
-                onChange={e => setAmount(e.target.value)}
-                required
-                className="form-input"
-                style={{ paddingLeft: '40px', fontSize: '1.25rem', fontWeight: 800 }}
-                autoFocus
-              />
+          {/* Installment Calculation Mode Toggle */}
+          {modalTab === 'installment' && (
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              background: 'var(--bg-tertiary)',
+              padding: '4px',
+              borderRadius: 'var(--radius-md)',
+              gap: '6px',
+              marginBottom: '16px'
+            }}>
+              <button
+                type="button"
+                onClick={() => handleSwitchInstallmentMode('total')}
+                style={{
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  background: installmentInputMode === 'total' ? 'var(--brand-primary)' : 'transparent',
+                  color: installmentInputMode === 'total' ? '#fff' : 'var(--text-muted)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>Informar Valor Total</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSwitchInstallmentMode('installment')}
+                style={{
+                  padding: '8px 10px',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  background: installmentInputMode === 'installment' ? 'var(--brand-primary)' : 'transparent',
+                  color: installmentInputMode === 'installment' ? '#fff' : 'var(--text-muted)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>Informar Valor da Parcela</span>
+              </button>
             </div>
-          </div>
+          )}
+
+          {/* Amount Input */}
+          {modalTab === 'installment' && installmentInputMode === 'installment' ? (
+            <div className="form-group">
+              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Valor de Cada Parcela (R$)</span>
+                <span style={{ fontSize: '0.74rem', color: 'var(--brand-primary-light)', fontWeight: 600 }}>
+                  em {totalInstallments}x vezes
+                </span>
+              </label>
+              <div style={{ position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  left: '14px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)'
+                }}>
+                  <DollarSign size={18} />
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="0,00"
+                  value={installmentAmountInput}
+                  onChange={e => handleInstallmentAmountChange(e.target.value)}
+                  required
+                  className="form-input"
+                  style={{ paddingLeft: '40px', fontSize: '1.25rem', fontWeight: 800 }}
+                  autoFocus
+                />
+              </div>
+
+              {parseFloat(installmentAmountInput.replace(',', '.')) > 0 && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 12px',
+                  background: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.82rem',
+                  color: '#10b981',
+                  fontWeight: 600
+                }}>
+                  <Calculator size={15} />
+                  <span>
+                    Total calculado: <strong>{formatCurrency(parseFloat(installmentAmountInput.replace(',', '.')) * (Math.max(1, parseInt(totalInstallments, 10) || 1)))}</strong> ({totalInstallments}x de {formatCurrency(parseFloat(installmentAmountInput.replace(',', '.')))})
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="form-label">
+                {modalTab === 'installment' ? 'Valor Total da Compra (R$)' : 'Valor (R$)'}
+              </label>
+              <div style={{ position: 'relative' }}>
+                <div style={{
+                  position: 'absolute',
+                  left: '14px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  color: 'var(--text-muted)'
+                }}>
+                  <DollarSign size={18} />
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  placeholder="0,00"
+                  value={amount}
+                  onChange={e => modalTab === 'installment' ? handleTotalAmountChange(e.target.value) : setAmount(e.target.value)}
+                  required
+                  className="form-input"
+                  style={{ paddingLeft: '40px', fontSize: '1.25rem', fontWeight: 800 }}
+                  autoFocus
+                />
+              </div>
+
+              {modalTab === 'installment' && parseFloat(amount.replace(',', '.')) > 0 && (
+                <div style={{
+                  marginTop: '8px',
+                  padding: '8px 12px',
+                  background: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.25)',
+                  borderRadius: 'var(--radius-sm)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  fontSize: '0.82rem',
+                  color: 'var(--brand-primary-light)',
+                  fontWeight: 600
+                }}>
+                  <Calculator size={15} />
+                  <span>
+                    Cada parcela sairá por <strong>{formatCurrency(parseFloat(amount.replace(',', '.')) / (Math.max(1, parseInt(totalInstallments, 10) || 1)))}</strong> ({totalInstallments}x)
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Description */}
           <div className="form-group">
@@ -444,15 +672,43 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div className="form-group">
                   <label className="form-label">Número de Parcelas</label>
-                  <select
+                  <input
+                    type="number"
+                    min="2"
+                    max="360"
                     value={totalInstallments}
-                    onChange={e => setTotalInstallments(e.target.value)}
-                    className="form-select"
-                  >
-                    {[2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 18, 24, 36, 48].map(n => (
-                      <option key={n} value={n}>{n}x parcelas</option>
+                    onChange={e => handleTotalInstallmentsChange(e.target.value)}
+                    className="form-input"
+                    placeholder="Ex: 10"
+                    style={{ fontWeight: 700 }}
+                    required
+                  />
+                  <div style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '4px',
+                    marginTop: '6px'
+                  }}>
+                    {['2', '3', '6', '10', '12', '18', '24', '36', '48'].map(n => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => handleTotalInstallmentsChange(n)}
+                        style={{
+                          padding: '3px 7px',
+                          fontSize: '0.72rem',
+                          fontWeight: totalInstallments === n ? 700 : 500,
+                          borderRadius: 'var(--radius-sm)',
+                          border: totalInstallments === n ? '1px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                          background: totalInstallments === n ? 'rgba(99, 102, 241, 0.2)' : 'var(--bg-tertiary)',
+                          color: totalInstallments === n ? 'var(--brand-primary-light)' : 'var(--text-muted)',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        {n}x
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
                 <div className="form-group">
