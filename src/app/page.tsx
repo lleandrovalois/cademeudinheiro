@@ -71,6 +71,7 @@ export default function Home() {
   // Modals
   const [isTxModalOpen, setIsTxModalOpen] = useState<boolean>(false);
   const [modalInitialType, setModalInitialType] = useState<TransactionType>('expense');
+  const [modalInitialTab, setModalInitialTab] = useState<'transaction' | 'installment' | 'recurring'>('transaction');
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
@@ -447,8 +448,12 @@ export default function Home() {
 
   const summary = calculateMonthlySummary(appData.transactions, currentMonth);
 
-  const openNewTransactionModal = (type: TransactionType = 'expense') => {
+  const openNewTransactionModal = (
+    type: TransactionType = 'expense', 
+    tab: 'transaction' | 'installment' | 'recurring' = 'transaction'
+  ) => {
     setModalInitialType(type);
+    setModalInitialTab(tab);
     setIsTxModalOpen(true);
   };
 
@@ -693,7 +698,7 @@ export default function Home() {
               hideValues={hideValues}
               onTogglePaidThisMonth={handleTogglePaidThisMonth}
               onDeleteRecurringBill={handleDeleteRecurringBill}
-              onOpenNewRecurring={() => setIsTxModalOpen(true)}
+              onOpenNewRecurring={() => openNewTransactionModal('expense', 'recurring')}
               onOpenNotificationModal={() => setIsEmailModalOpen(true)}
             />
           )}
@@ -705,7 +710,7 @@ export default function Home() {
               hideValues={hideValues}
               onAdvanceInstallment={handleAdvanceInstallment}
               onDeleteInstallment={handleDeleteInstallment}
-              onOpenNewInstallment={() => setIsTxModalOpen(true)}
+              onOpenNewInstallment={() => openNewTransactionModal('expense', 'installment')}
             />
           )}
 
@@ -860,6 +865,7 @@ export default function Home() {
         onSaveInstallment={handleSaveInstallment}
         onSaveRecurring={handleSaveRecurring}
         initialType={modalInitialType}
+        initialTab={modalInitialTab}
       />
 
       {/* Modal: Cloud Supabase & Backup Settings */}

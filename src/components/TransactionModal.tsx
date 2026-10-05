@@ -28,6 +28,7 @@ interface TransactionModalProps {
   onSaveInstallment: (inst: Omit<InstallmentPurchase, 'id' | 'createdAt'>) => void;
   onSaveRecurring: (bill: Omit<RecurringBill, 'id' | 'createdAt' | 'paidMonths'>) => void;
   initialType?: TransactionType;
+  initialTab?: ModalTab;
 }
 
 type ModalTab = 'transaction' | 'installment' | 'recurring';
@@ -40,9 +41,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onSaveTransaction,
   onSaveInstallment,
   onSaveRecurring,
-  initialType = 'expense'
+  initialType = 'expense',
+  initialTab = 'transaction'
 }) => {
-  const [modalTab, setModalTab] = useState<ModalTab>('transaction');
+  const [modalTab, setModalTab] = useState<ModalTab>(initialTab);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialTab) setModalTab(initialTab);
+      if (initialType) setTxType(initialType);
+    }
+  }, [isOpen, initialTab, initialType]);
 
   // Form State - Single Transaction
   const [txType, setTxType] = useState<TransactionType>(initialType);
