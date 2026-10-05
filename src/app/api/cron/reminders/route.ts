@@ -47,7 +47,11 @@ async function handleCron(req: Request) {
       result,
     });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Erro na execução do cron de lembretes:', error);
-    return NextResponse.json({ error: 'Erro ao processar lembretes.' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Erro ao processar lembretes.', 
+      details: errorMsg 
+    }, { status: 500 });
   }
 }
