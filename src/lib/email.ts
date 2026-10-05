@@ -23,7 +23,10 @@ export function getEmailTransporter() {
   const secureEnv = cleanEnv(process.env.SMTP_SECURE);
   const secure = secureEnv ? secureEnv === 'true' : port === 465;
   const user = cleanEnv(process.env.SMTP_USER);
-  const pass = cleanEnv(process.env.SMTP_PASS);
+  let pass = cleanEnv(process.env.SMTP_PASS);
+  if (host.includes('gmail')) {
+    pass = pass.replace(/\s+/g, '');
+  }
 
   if (!host || !user || !pass) {
     return null;
