@@ -12,18 +12,24 @@ export interface NotificationResult {
 export async function processDueBillsReminders(options?: {
   targetUserId?: string;
   forceSend?: boolean;
+  targetDate?: string;
 }): Promise<NotificationResult> {
   await ensureDbInitialized();
   const db = getDb();
 
-  // Get current date string and day in Brasília time (America/Sao_Paulo)
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Sao_Paulo',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now); // format: YYYY-MM-DD
+  // Get current date string and day in Brasília time (America/Sao_Paulo) or simulated targetDate
+  let parts: string;
+  if (options?.targetDate && /^\d{4}-\d{2}-\d{2}$/.test(options.targetDate)) {
+    parts = options.targetDate;
+  } else {
+    const now = new Date();
+    parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(now); // format: YYYY-MM-DD
+  }
 
   const [year, month, day] = parts.split('-');
   const currentYearMonth = `${year}-${month}`;
