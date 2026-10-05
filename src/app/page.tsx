@@ -295,7 +295,7 @@ export default function Home() {
         gap: '12px'
       }}>
         <div style={{ width: '20px', height: '20px', border: '3px solid var(--brand-primary)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <span>Carregando FinControl...</span>
+        <span>Carregando Cadê Meu Dinheiro?...</span>
         <style jsx>{`
           @keyframes spin { to { transform: rotate(360deg); } }
         `}</style>

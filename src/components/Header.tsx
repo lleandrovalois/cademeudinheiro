@@ -72,10 +72,10 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         <div>
           <h1 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0, lineHeight: 1.2 }}>
-            Fin<span style={{ color: 'var(--brand-primary-light)' }}>Control</span>
+            Cadê Meu <span style={{ color: 'var(--brand-primary-light)' }}>Dinheiro?</span>
           </h1>
           <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            Finanças Inteligentes
+            Controle Descomplicado
           </span>
         </div>
       </div>

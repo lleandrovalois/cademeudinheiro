@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FinControl • Controle Financeiro Pessoal',
+  title: 'Cadê Meu Dinheiro? • Controle Financeiro Descomplicado',
   description: 'Aplicação moderna e altamente responsiva para gestão financeira pessoal: receitas, despesas, contas fixas, parcelamentos e metas.',
   manifest: '/manifest.json',
   icons: {

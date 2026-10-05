@@ -1,6 +1,6 @@
 {
-  "name": "FinControl - Gestão Financeira",
-  "short_name": "FinControl",
+  "name": "Cadê Meu Dinheiro? - Controle Financeiro",
+  "short_name": "Cadê Meu Dinheiro?",
   "description": "Controle financeiro pessoal completo e responsivo",
   "start_url": "/",
   "display": "standalone",

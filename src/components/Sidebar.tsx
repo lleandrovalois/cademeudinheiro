@@ -73,11 +73,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <TrendingUp size={24} />
         </div>
         <div>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em' }}>
-            Fin<span style={{ color: 'var(--brand-primary-light)' }}>Control</span>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, margin: 0, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+            Cadê Meu <span style={{ color: 'var(--brand-primary-light)' }}>Dinheiro?</span>
           </h2>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-            Painel Financeiro
+            Controle Descomplicado
           </span>
         </div>
       </div>
