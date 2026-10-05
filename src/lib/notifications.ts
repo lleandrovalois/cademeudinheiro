@@ -121,6 +121,43 @@ export async function processDueBillsReminders(options?: {
       }
     }
 
+    // 3. Check active installment purchases due today
+    const instRes = await db.execute({
+      sql: 'SELECT id, description, installment_amount, total_installments, paid_installments, start_date, category, payment_card FROM installment_purchases WHERE user_id = ? AND paid_installments < total_installments',
+      args: [userId],
+    });
+
+    for (const inst of instRes.rows) {
+      const startDateStr = String(inst.start_date || '');
+      if (!startDateStr || !startDateStr.includes('-')) continue;
+
+      const [sYear, sMonth, sDay] = startDateStr.split('-').map(Number);
+      const instDueDay = sDay || 1;
+
+      // Check if today matches the installment due day
+      if (instDueDay === currentDayNumber) {
+        const [cYear, cMonth] = parts.split('-').map(Number);
+        const monthDiff = (cYear - sYear) * 12 + (cMonth - sMonth);
+        const totalInst = Number(inst.total_installments);
+        const paidInst = Number(inst.paid_installments);
+
+        // Check if the purchase is in its active monthly window
+        if (monthDiff >= 0 && monthDiff < totalInst) {
+          // If this month's installment has not been paid yet
+          if (paidInst <= monthDiff) {
+            const currentParcelNumber = monthDiff + 1;
+            const cardInfo = inst.payment_card ? ` (${inst.payment_card})` : '';
+            dueBills.push({
+              title: `${inst.description} - Parcela ${currentParcelNumber}/${totalInst}${cardInfo}`,
+              category: String(inst.category || 'Compras Parceladas'),
+              amount: Number(inst.installment_amount),
+              type: 'installment',
+            });
+          }
+        }
+      }
+    }
+
     if (dueBills.length === 0) {
       result.noBillsFound++;
       continue;
