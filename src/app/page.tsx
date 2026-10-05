@@ -8,7 +8,8 @@ import {
   Zap,
   TrendingUp,
   UserCheck,
-  Bell
+  Bell,
+  Pencil
 } from 'lucide-react';
 import { Header } from '../components/Header';
 import { Sidebar } from '../components/Sidebar';
@@ -76,6 +77,10 @@ export default function Home() {
   const [isCloudModalOpen, setIsCloudModalOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState<boolean>(false);
+
+  // Editing state
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingInstallment, setEditingInstallment] = useState<InstallmentPurchase | null>(null);
 
   // Initialize storage, auth and theme
   useEffect(() => {
@@ -197,6 +202,47 @@ export default function Home() {
 
     if (currentUser && !currentUser.isGuest) {
       await clearAllTransactionsInCloud(currentUser.id);
+    }
+  };
+
+  const handleOpenEditTransaction = (tx: Transaction) => {
+    setEditingTransaction(tx);
+    setEditingInstallment(null);
+    setModalInitialType(tx.type);
+    setModalInitialTab('transaction');
+    setIsTxModalOpen(true);
+  };
+
+  const handleOpenEditInstallment = (inst: InstallmentPurchase) => {
+    setEditingInstallment(inst);
+    setEditingTransaction(null);
+    setModalInitialTab('installment');
+    setIsTxModalOpen(true);
+  };
+
+  const handleUpdateTransaction = (updatedTx: Transaction) => {
+    if (!appData) return;
+    const updated = appData.transactions.map(t => t.id === updatedTx.id ? updatedTx : t);
+    setAppData({ ...appData, transactions: updated });
+
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { transactions: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      syncTransactionToCloud(updatedTx, currentUser.id);
+    }
+  };
+
+  const handleUpdateInstallment = (updatedInst: InstallmentPurchase) => {
+    if (!appData) return;
+    const updated = appData.installments.map(i => i.id === updatedInst.id ? updatedInst : i);
+    setAppData({ ...appData, installments: updated });
+
+    const userId = currentUser?.id || 'guest';
+    saveUserData(userId, { installments: updated });
+
+    if (currentUser && !currentUser.isGuest) {
+      syncInstallmentToCloud(updatedInst, currentUser.id);
     }
   };
 
@@ -501,6 +547,8 @@ export default function Home() {
     type: TransactionType = 'expense', 
     tab: 'transaction' | 'installment' | 'recurring' = 'transaction'
   ) => {
+    setEditingTransaction(null);
+    setEditingInstallment(null);
     setModalInitialType(type);
     setModalInitialTab(tab);
     setIsTxModalOpen(true);
@@ -665,7 +713,7 @@ export default function Home() {
                             </span>
                           </div>
 
-                          <div style={{ textAlign: 'right' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{
                               fontSize: '0.925rem',
                               fontWeight: 800,
@@ -673,6 +721,15 @@ export default function Home() {
                             }}>
                               {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount, hideValues)}
                             </span>
+                            <button
+                              onClick={() => handleOpenEditTransaction(t)}
+                              className="btn-icon"
+                              style={{ width: '28px', height: '28px' }}
+                              title="Editar Lançamento"
+                              aria-label="Editar Lançamento"
+                            >
+                              <Pencil size={13} color="var(--brand-primary-light)" />
+                            </button>
                           </div>
                         </div>
                       ))
@@ -764,6 +821,7 @@ export default function Home() {
               onToggleStatus={handleToggleStatus}
               onOpenNewTransaction={() => openNewTransactionModal('expense')}
               onClearAllTransactions={handleClearAllTransactions}
+              onEditTransaction={handleOpenEditTransaction}
             />
           )}
 
@@ -788,6 +846,7 @@ export default function Home() {
               onAdvanceInstallment={handleAdvanceInstallment}
               onDeleteInstallment={handleDeleteInstallment}
               onOpenNewInstallment={() => openNewTransactionModal('expense', 'installment')}
+              onEditInstallment={handleOpenEditInstallment}
             />
           )}
 
@@ -955,17 +1014,25 @@ export default function Home() {
         onSelectTab={setActiveTab}
       />
 
-      {/* Modal: New Transaction / Installment / Recurring */}
+      {/* Modal: New Transaction / Installment / Recurring / Edit */}
       <TransactionModal
         isOpen={isTxModalOpen}
-        onClose={() => setIsTxModalOpen(false)}
+        onClose={() => {
+          setIsTxModalOpen(false);
+          setEditingTransaction(null);
+          setEditingInstallment(null);
+        }}
         categories={appData.categories}
         currentMonth={currentMonth}
         onSaveTransaction={handleSaveTransaction}
+        onUpdateTransaction={handleUpdateTransaction}
         onSaveInstallment={handleSaveInstallment}
+        onUpdateInstallment={handleUpdateInstallment}
         onSaveRecurring={handleSaveRecurring}
         initialType={modalInitialType}
         initialTab={modalInitialTab}
+        editingTransaction={editingTransaction}
+        editingInstallment={editingInstallment}
       />
 
       {/* Modal: Cloud Supabase & Backup Settings */}

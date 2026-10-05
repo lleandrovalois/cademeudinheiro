@@ -25,10 +25,14 @@ interface TransactionModalProps {
   categories: Category[];
   currentMonth: string;
   onSaveTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'>) => void;
+  onUpdateTransaction?: (tx: Transaction) => void;
   onSaveInstallment: (inst: Omit<InstallmentPurchase, 'id' | 'createdAt'>) => void;
+  onUpdateInstallment?: (inst: InstallmentPurchase) => void;
   onSaveRecurring: (bill: Omit<RecurringBill, 'id' | 'createdAt' | 'paidMonths'>) => void;
   initialType?: TransactionType;
   initialTab?: ModalTab;
+  editingTransaction?: Transaction | null;
+  editingInstallment?: InstallmentPurchase | null;
 }
 
 type ModalTab = 'transaction' | 'installment' | 'recurring';
@@ -39,19 +43,16 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   categories,
   currentMonth,
   onSaveTransaction,
+  onUpdateTransaction,
   onSaveInstallment,
+  onUpdateInstallment,
   onSaveRecurring,
   initialType = 'expense',
-  initialTab = 'transaction'
+  initialTab = 'transaction',
+  editingTransaction = null,
+  editingInstallment = null
 }) => {
   const [modalTab, setModalTab] = useState<ModalTab>(initialTab);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      if (initialTab) setModalTab(initialTab);
-      if (initialType) setTxType(initialType);
-    }
-  }, [isOpen, initialTab, initialType]);
 
   // Form State - Single Transaction
   const [txType, setTxType] = useState<TransactionType>(initialType);
@@ -74,6 +75,41 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   // Form State - Recurring Bill
   const [dueDay, setDueDay] = useState('10');
 
+  React.useEffect(() => {
+    if (isOpen) {
+      if (editingTransaction) {
+        setModalTab('transaction');
+        setTxType(editingTransaction.type);
+        setDescription(editingTransaction.description);
+        setAmount(editingTransaction.amount.toString());
+        setCategory(editingTransaction.category);
+        setDate(editingTransaction.date);
+        setPaymentMethod(editingTransaction.paymentMethod);
+        setStatus(editingTransaction.status);
+        setNotes(editingTransaction.notes || '');
+      } else if (editingInstallment) {
+        setModalTab('installment');
+        setDescription(editingInstallment.description);
+        setAmount(editingInstallment.totalAmount.toString());
+        setTotalInstallments(editingInstallment.totalInstallments.toString());
+        setPaidInstallments(editingInstallment.paidInstallments.toString());
+        setPaymentCard(editingInstallment.paymentCard || '');
+        setCategory(editingInstallment.category);
+        setDate(editingInstallment.startDate);
+        setNotes(editingInstallment.notes || '');
+      } else {
+        if (initialTab) setModalTab(initialTab);
+        if (initialType) setTxType(initialType);
+        setDescription('');
+        setAmount('');
+        setNotes('');
+        setPaidInstallments('0');
+        const today = new Date().toISOString().slice(0, 10);
+        setDate(today.startsWith(currentMonth) ? today : `${currentMonth}-01`);
+      }
+    }
+  }, [isOpen, editingTransaction, editingInstallment, initialTab, initialType, currentMonth]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -85,31 +121,61 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     }
 
     if (modalTab === 'transaction') {
-      onSaveTransaction({
-        description: description.trim(),
-        amount: numAmount,
-        type: txType,
-        category,
-        date,
-        paymentMethod,
-        status,
-        notes: notes.trim()
-      });
+      if (editingTransaction && onUpdateTransaction) {
+        onUpdateTransaction({
+          ...editingTransaction,
+          description: description.trim(),
+          amount: numAmount,
+          type: txType,
+          category,
+          date,
+          paymentMethod,
+          status,
+          notes: notes.trim()
+        });
+      } else {
+        onSaveTransaction({
+          description: description.trim(),
+          amount: numAmount,
+          type: txType,
+          category,
+          date,
+          paymentMethod,
+          status,
+          notes: notes.trim()
+        });
+      }
     } else if (modalTab === 'installment') {
       const installmentsCount = parseInt(totalInstallments, 10) || 2;
       const installmentAmount = +(numAmount / installmentsCount).toFixed(2);
       const paidCount = Math.max(0, parseInt(paidInstallments, 10) || 0);
-      onSaveInstallment({
-        description: description.trim(),
-        totalAmount: numAmount,
-        installmentAmount,
-        totalInstallments: installmentsCount,
-        paidInstallments: paidCount,
-        startDate: date,
-        category,
-        paymentCard: paymentCard.trim(),
-        notes: notes.trim()
-      });
+
+      if (editingInstallment && onUpdateInstallment) {
+        onUpdateInstallment({
+          ...editingInstallment,
+          description: description.trim(),
+          totalAmount: numAmount,
+          installmentAmount,
+          totalInstallments: installmentsCount,
+          paidInstallments: paidCount,
+          startDate: date,
+          category,
+          paymentCard: paymentCard.trim(),
+          notes: notes.trim()
+        });
+      } else {
+        onSaveInstallment({
+          description: description.trim(),
+          totalAmount: numAmount,
+          installmentAmount,
+          totalInstallments: installmentsCount,
+          paidInstallments: paidCount,
+          startDate: date,
+          category,
+          paymentCard: paymentCard.trim(),
+          notes: notes.trim()
+        });
+      }
     } else if (modalTab === 'recurring') {
       onSaveRecurring({
         title: description.trim(),
@@ -149,9 +215,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         {/* Modal Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
           <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>Novo Lançamento</h2>
+            <h2 style={{ fontSize: '1.25rem', fontWeight: 800 }}>
+              {editingTransaction ? 'Editar Lançamento' : editingInstallment ? 'Editar Parcelamento' : 'Novo Lançamento'}
+            </h2>
             <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-              Cadastre despesas, receitas ou parcelamentos
+              {editingTransaction || editingInstallment ? 'Altere as informações desejadas e salve' : 'Cadastre despesas, receitas ou parcelamentos'}
             </span>
           </div>
 
@@ -160,16 +228,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Category Tabs */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          background: 'var(--bg-tertiary)',
-          padding: '4px',
-          borderRadius: 'var(--radius-md)',
-          gap: '4px',
-          marginBottom: '20px'
-        }}>
+        {/* Modal Category Tabs - Only shown when creating new */}
+        {!editingTransaction && !editingInstallment && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            background: 'var(--bg-tertiary)',
+            padding: '4px',
+            borderRadius: 'var(--radius-md)',
+            gap: '4px',
+            marginBottom: '20px'
+          }}>
           <button
             type="button"
             onClick={() => setModalTab('transaction')}
@@ -235,6 +304,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <span>Fixa/Recorrente</span>
           </button>
         </div>
+        )}
 
         {/* Transaction Type Buttons (Income / Expense) if in transaction tab */}
         {modalTab === 'transaction' && (
@@ -470,7 +540,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               style={{ width: '100%', padding: '14px', fontSize: '1rem' }}
             >
               <Check size={20} />
-              <span>Confirmar e Salvar</span>
+              <span>{editingTransaction || editingInstallment ? 'Salvar Alterações' : 'Confirmar e Salvar'}</span>
             </button>
           </div>
         </form>

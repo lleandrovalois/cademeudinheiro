@@ -13,7 +13,8 @@ import {
   Plus,
   Calendar,
   CalendarClock,
-  AlertCircle
+  AlertCircle,
+  Pencil
 } from 'lucide-react';
 import { Transaction, Category } from '../types/finance';
 import { formatCurrency, formatDateBR, getPaymentMethodLabel, formatMonthYearBR } from '../lib/formatters';
@@ -27,6 +28,7 @@ interface TransactionsListProps {
   onToggleStatus: (id: string) => void;
   onOpenNewTransaction: () => void;
   onClearAllTransactions?: () => void;
+  onEditTransaction?: (tx: Transaction) => void;
 }
 
 export const TransactionsList: React.FC<TransactionsListProps> = ({
@@ -37,7 +39,8 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
   onDeleteTransaction,
   onToggleStatus,
   onOpenNewTransaction,
-  onClearAllTransactions
+  onClearAllTransactions,
+  onEditTransaction
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState<'all' | 'income' | 'expense' | 'pending'>('all');
@@ -457,6 +460,19 @@ export const TransactionsList: React.FC<TransactionsListProps> = ({
                       </span>
                     </button>
                   </div>
+
+                  {/* Edit Button */}
+                  {onEditTransaction && (
+                    <button
+                      onClick={() => onEditTransaction(t)}
+                      className="btn-icon"
+                      style={{ width: '32px', height: '32px' }}
+                      title="Editar Lançamento"
+                      aria-label="Editar Lançamento"
+                    >
+                      <Pencil size={15} color="var(--brand-primary-light)" />
+                    </button>
+                  )}
 
                   {/* Delete Button */}
                   <button

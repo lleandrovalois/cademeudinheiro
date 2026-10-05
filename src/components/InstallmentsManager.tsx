@@ -8,7 +8,8 @@ import {
   Calendar, 
   ChevronRight, 
   PartyPopper,
-  CheckCircle2
+  CheckCircle2,
+  Pencil
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { InstallmentPurchase } from '../types/finance';
@@ -20,6 +21,7 @@ interface InstallmentsManagerProps {
   onAdvanceInstallment: (installmentId: string) => void;
   onDeleteInstallment: (installmentId: string) => void;
   onOpenNewInstallment: () => void;
+  onEditInstallment?: (installment: InstallmentPurchase) => void;
 }
 
 export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
@@ -27,7 +29,8 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
   hideValues,
   onAdvanceInstallment,
   onDeleteInstallment,
-  onOpenNewInstallment
+  onOpenNewInstallment,
+  onEditInstallment
 }) => {
   // Metrics
   const activeInstallments = installments.filter(i => i.paidInstallments < i.totalInstallments);
@@ -143,10 +146,11 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
           const paidTotal = inst.paidInstallments * inst.installmentAmount;
           const remainingTotal = remainingCount * inst.installmentAmount;
 
-          // End date calculation
+          // End date calculation based on remaining installments
           const [startYear, startMonth, startDay] = inst.startDate.split('-').map(Number);
-          const endDate = new Date(startYear, startMonth - 1 + inst.totalInstallments, startDay || 1);
-          const endStr = `${String(endDate.getMonth() + 1).padStart(2, '0')}/${endDate.getFullYear()}`;
+          const monthsToAdd = remainingCount > 0 ? (remainingCount - 1) : 0;
+          const endDate = new Date(startYear, (startMonth - 1) + monthsToAdd, startDay || 1);
+          const endStr = isFinished ? 'Quitado' : `${String(endDate.getMonth() + 1).padStart(2, '0')}/${endDate.getFullYear()}`;
 
           return (
             <div 
@@ -241,18 +245,32 @@ export const InstallmentsManager: React.FC<InstallmentsManagerProps> = ({
                   </div>
                 )}
 
-                <button
-                  onClick={() => {
-                    if (confirm(`Excluir parcelamento "${inst.description}"?`)) {
-                      onDeleteInstallment(inst.id);
-                    }
-                  }}
-                  className="btn-icon"
-                  style={{ width: '32px', height: '32px' }}
-                  title="Excluir Parcelamento"
-                >
-                  <Trash2 size={14} color="var(--color-expense)" />
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {onEditInstallment && (
+                    <button
+                      onClick={() => onEditInstallment(inst)}
+                      className="btn-icon"
+                      style={{ width: '32px', height: '32px' }}
+                      title="Editar Parcelamento"
+                      aria-label="Editar Parcelamento"
+                    >
+                      <Pencil size={14} color="var(--brand-primary-light)" />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      if (confirm(`Excluir parcelamento "${inst.description}"?`)) {
+                        onDeleteInstallment(inst.id);
+                      }
+                    }}
+                    className="btn-icon"
+                    style={{ width: '32px', height: '32px' }}
+                    title="Excluir Parcelamento"
+                  >
+                    <Trash2 size={14} color="var(--color-expense)" />
+                  </button>
+                </div>
               </div>
             </div>
           );
